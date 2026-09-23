@@ -17,6 +17,7 @@ public sealed class Supervisor
         Stopped,
         Running,
         Stopping,
+        Updating,
     }
 
     private sealed class Countdown
@@ -24,6 +25,7 @@ public sealed class Supervisor
         public required DateTime At { get; init; }
         public required StopKind Kind { get; init; }
         public required string Reason { get; init; }
+        public bool Update { get; init; }
         public HashSet<int> Sent { get; } = new();
     }
 
@@ -47,6 +49,9 @@ public sealed class Supervisor
     private string? _lastCrash;
     private int _commandSequence;
     private bool _exit;
+    private bool _updateAfterStop;
+    private Task<UpdateResult>? _update;
+    private DateTime _updateStarted;
     private volatile bool _userInterrupted;
     private long _ignoreCtrlCUntil;
 
@@ -61,8 +66,13 @@ public sealed class Supervisor
         Log.OpenFile(Path.Combine(_config.BackupDir, "servertool.log"));
         Log.Info($"Valheim server tool, config {_config.ConfigPath}");
         Log.Info($"  server  : {_config.ExecutablePath()}");
-        Log.Info($"  world   : {_config.Server.World} in {_config.SaveDir()}");
+        Log.Info($"  world   : {_config.World} in {_config.SaveDir()}");
         Log.Info($"  backups : {_config.BackupDir}");
+        Log.Info($"  command : {string.Join(' ', MaskPassword(_config.ServerArguments()))}");
+
+        Log.Info(_config.WorldExists()
+            ? $"  seed    : the world {_config.World} already exists and keeps its own seed"
+            : $"  seed    : new world {_config.World} will be created with seed {_config.World}");
 
         foreach (string problem in Validate())
         {
@@ -77,7 +87,7 @@ public sealed class Supervisor
             : PosixSignalRegistration.Create(PosixSignal.SIGTERM, OnTerminate);
         StartConsoleReader();
 
-        ScheduleNextDaily(DateTime.Now + MaxWarning());
+        ScheduleNextDaily(DateTime.Now);
         Log.Info(_nextDaily.HasValue ? $"Daily restart at {_nextDaily:HH:mm}, next {_nextDaily:yyyy-MM-dd HH:mm}." : "Daily restart is off.");
         Log.Info("Type 'help' for commands.");
         StartServer();
@@ -131,23 +141,18 @@ public sealed class Supervisor
         return 0;
     }
 
+    private static IEnumerable<string> MaskPassword(List<string> args)
+    {
+        for (int i = 0; i < args.Count; i++)
+        {
+            bool secret = i > 0 && args[i - 1] == "-password";
+            string arg = secret ? "*****" : args[i];
+            yield return arg.Contains(' ') ? $"\"{arg}\"" : arg;
+        }
+    }
+
     private IEnumerable<string> Validate()
     {
-        if (!File.Exists(_config.ExecutablePath()))
-        {
-            yield return $"Server executable not found: {_config.ExecutablePath()}";
-        }
-
-        if (_config.Server.Password.Length is > 0 and < 5)
-        {
-            yield return "The server password must be at least 5 characters, or Valheim refuses to start.";
-        }
-
-        if (_config.Server.Password.Length > 0 && _config.Server.Name.Contains(_config.Server.Password, StringComparison.OrdinalIgnoreCase))
-        {
-            yield return "The server password may not appear in the server name, or Valheim refuses to start.";
-        }
-
         if (!File.Exists(Path.Combine(_config.ServerDir, "BepInEx", "plugins", "ServerAuthority.dll")))
         {
             yield return "ServerAuthority.dll is not installed, so player warnings cannot be sent and stopping falls back to an interrupt signal.";
@@ -173,6 +178,9 @@ public sealed class Supervisor
             case State.Stopping:
                 TickStopping(now);
                 break;
+            case State.Updating:
+                TickUpdating();
+                break;
             case State.Stopped:
                 if (_crashRestartAt.HasValue && now >= _crashRestartAt.Value)
                 {
@@ -187,6 +195,11 @@ public sealed class Supervisor
 
     private string StartServer()
     {
+        if (_state == State.Updating)
+        {
+            return "The server is being updated and starts when the update finishes.";
+        }
+
         if (_server != null)
         {
             return $"The server is already {(_state == State.Stopping ? "stopping" : "running")}.";
@@ -207,6 +220,7 @@ public sealed class Supervisor
 
         _state = State.Running;
         _userInterrupted = false;
+        _updateAfterStop = false;
         _countdown = null;
         Log.Good($"Server started, pid {_server.Id}, logging to {logPath}");
         return $"Server started, pid {_server.Id}.";
@@ -240,7 +254,12 @@ public sealed class Supervisor
 
             Backups.PruneServerLogs(_config);
 
-            if (_stopKind == StopKind.Restart)
+            if (_updateAfterStop)
+            {
+                _updateAfterStop = false;
+                BeginUpdate();
+            }
+            else if (_stopKind == StopKind.Restart)
             {
                 StartServer();
             }
@@ -308,8 +327,8 @@ public sealed class Supervisor
             return;
         }
 
-        _countdown = new Countdown { At = at, Kind = StopKind.Restart, Reason = "daily restart" };
-        Log.Info($"Daily restart at {at:HH:mm}, warning players.");
+        _countdown = new Countdown { At = at, Kind = StopKind.Restart, Reason = "daily restart", Update = _config.UpdateOnDailyRestart };
+        Log.Info($"Daily restart{(_countdown.Update ? " and update" : "")} at {at:HH:mm}, warning players.");
     }
 
     private void ScheduleNextDaily(DateTime after)
@@ -341,9 +360,10 @@ public sealed class Supervisor
         if (remaining <= TimeSpan.Zero)
         {
             StopKind kind = _countdown.Kind;
+            bool update = _countdown.Update;
             _countdown = null;
             Say(Render(_config.FinalMessage, kind, 0));
-            BeginStop(kind);
+            BeginStop(kind, update);
             return;
         }
 
@@ -355,19 +375,76 @@ public sealed class Supervisor
             return;
         }
 
+        int minutes = Math.Max(1, (int)Math.Round(remaining.TotalMinutes));
         _countdown.Sent.UnionWith(due);
-        Say(Render(_config.WarningMessage, _countdown.Kind, due.Min()));
+        _countdown.Sent.Add(minutes);
+        Say(Render(_config.WarningMessage, _countdown.Kind, minutes));
     }
 
-    private void BeginStop(StopKind kind)
+    private void BeginStop(StopKind kind, bool update)
     {
         _state = State.Stopping;
         _stopKind = kind;
+        _updateAfterStop = update;
         _stopStarted = DateTime.Now;
         _interruptSent = false;
         _killSent = false;
-        Log.Info($"Stopping the server ({Describe(kind)}), saving the world.");
+        Log.Info($"Stopping the server ({Describe(kind, update)}), saving the world.");
         _shutdownCommand = WriteCommand("shutdown");
+    }
+
+    private void BeginUpdate()
+    {
+        string? steamCmd = SteamCmd.Find(_config);
+        if (steamCmd == null)
+        {
+            Log.Warn("SteamCMD was not found, so the server was not updated. Set SteamCmdPath in [Update].");
+            FinishUpdate();
+            return;
+        }
+
+        string logPath = Path.Combine(Backups.LogsDir(_config), $"steamcmd-{Backups.Stamp()}.log");
+        Log.Info($"Updating the server with {steamCmd}, logging to {logPath}");
+        _state = State.Updating;
+        _updateStarted = DateTime.Now;
+        _update = Task.Run(() => SteamCmd.Update(_config, steamCmd, logPath));
+    }
+
+    private void TickUpdating()
+    {
+        if (_update == null || !_update.IsCompleted)
+        {
+            return;
+        }
+
+        UpdateResult result = _update.IsCompletedSuccessfully
+            ? _update.Result
+            : new UpdateResult(false, $"The update failed: {_update.Exception?.GetBaseException().Message}");
+        _update = null;
+
+        if (result.Success)
+        {
+            Log.Good(result.Summary);
+        }
+        else
+        {
+            Log.Error(_stopKind == StopKind.Restart ? result.Summary + " Starting the server on the version it has." : result.Summary);
+        }
+
+        FinishUpdate();
+    }
+
+    private void FinishUpdate()
+    {
+        _state = State.Stopped;
+        if (_stopKind == StopKind.Restart)
+        {
+            StartServer();
+        }
+        else if (_stopKind == StopKind.Quit)
+        {
+            _exit = true;
+        }
     }
 
     private void TickStopping(DateTime now)
@@ -423,6 +500,8 @@ public sealed class Supervisor
                 return RequestStop(StopKind.Stop, now);
             case "restart":
                 return RequestStop(StopKind.Restart, now);
+            case "update":
+                return RequestStop(StopKind.Restart, now, update: true);
             case "quit":
             case "exit":
                 return RequestStop(StopKind.Quit, now);
@@ -453,12 +532,21 @@ public sealed class Supervisor
         }
     }
 
-    private string RequestStop(StopKind kind, bool now)
+    private string RequestStop(StopKind kind, bool now, bool update = false)
     {
         switch (_state)
         {
             case State.Stopped:
                 _crashRestartAt = null;
+                if (update)
+                {
+                    _stopKind = StopKind.Stop;
+                    BeginUpdate();
+                    return _state == State.Updating
+                        ? "Updating the server. It stays stopped afterwards; use 'start' when it is done."
+                        : "The update could not run, see the log.";
+                }
+
                 if (kind == StopKind.Quit)
                 {
                     _exit = true;
@@ -479,7 +567,23 @@ public sealed class Supervisor
                     return "The server is already stopping, the tool will exit afterwards.";
                 }
 
+                if (update)
+                {
+                    _updateAfterStop = true;
+                    return "The server is already stopping, it will be updated afterwards.";
+                }
+
                 return "The server is already stopping.";
+            case State.Updating:
+                if (kind is StopKind.Quit or StopKind.Stop)
+                {
+                    _stopKind = kind;
+                    return kind == StopKind.Quit
+                        ? "The server is being updated, the tool will exit when the update finishes."
+                        : "The server is being updated and will stay stopped afterwards.";
+                }
+
+                return "The server is being updated and starts when the update finishes.";
         }
 
         int minutes = _config.WarningMinutes.Where(m => m > 0).DefaultIfEmpty(0).Max();
@@ -487,8 +591,8 @@ public sealed class Supervisor
         {
             _countdown = null;
             Say(Render(_config.FinalMessage, kind, 0));
-            BeginStop(kind);
-            return $"Server {Describe(kind)} now.";
+            BeginStop(kind, update);
+            return $"Server {Describe(kind, update)} now.";
         }
 
         Countdown? existing = _countdown;
@@ -498,14 +602,14 @@ public sealed class Supervisor
             at = existing.At;
         }
 
-        _countdown = new Countdown { At = at, Kind = kind, Reason = "requested" };
+        _countdown = new Countdown { At = at, Kind = kind, Reason = "requested", Update = update || (existing?.Update ?? false) };
         if (existing != null && existing.At == at)
         {
             _countdown.Sent.UnionWith(existing.Sent);
         }
 
-        Log.Info($"Scheduled {Describe(kind)} at {at:HH:mm:ss}.");
-        return $"Server {Describe(kind)} at {at:HH:mm:ss}, warning players. Use 'cancel' to abort or add --now to skip the warnings.";
+        Log.Info($"Scheduled {Describe(kind, _countdown.Update)} at {at:HH:mm:ss}.");
+        return $"Server {Describe(kind, _countdown.Update)} at {at:HH:mm:ss}, warning players. Use 'cancel' to abort or add --now to skip the warnings.";
     }
 
     private string CancelCountdown()
@@ -517,7 +621,7 @@ public sealed class Supervisor
 
         StopKind kind = _countdown.Kind;
         _countdown = null;
-        Say($"Server {Describe(kind)} cancelled");
+        Say(Render(_config.CancelMessage, kind, 0));
         Log.Info($"Cancelled the scheduled {Describe(kind)}.");
         return $"Cancelled the {Describe(kind)}.";
     }
@@ -616,7 +720,10 @@ public sealed class Supervisor
                 lines.Add($"Server running, pid {_server!.Id}, up {Format(now - _server.StartedAt)}.");
                 break;
             case State.Stopping:
-                lines.Add($"Server stopping ({Describe(_stopKind)}) for {Format(now - _stopStarted)}.");
+                lines.Add($"Server stopping ({Describe(_stopKind, _updateAfterStop)}) for {Format(now - _stopStarted)}.");
+                break;
+            case State.Updating:
+                lines.Add($"Server stopped, updating with SteamCMD for {Format(now - _updateStarted)}.");
                 break;
             default:
                 lines.Add(_crashRestartAt.HasValue
@@ -627,7 +734,7 @@ public sealed class Supervisor
 
         if (_countdown != null)
         {
-            lines.Add($"Scheduled {Describe(_countdown.Kind)} ({_countdown.Reason}) at {_countdown.At:HH:mm:ss}.");
+            lines.Add($"Scheduled {Describe(_countdown.Kind, _countdown.Update)} ({_countdown.Reason}) at {_countdown.At:HH:mm:ss}.");
         }
 
         lines.Add(_nextDaily.HasValue ? $"Next daily restart {_nextDaily:yyyy-MM-dd HH:mm}." : "Daily restart is off.");
@@ -643,11 +750,11 @@ public sealed class Supervisor
             .Replace("{time}", minutes == 1 ? "1 minute" : $"{minutes} minutes");
     }
 
-    private static string ActionWord(StopKind kind) => kind == StopKind.Restart ? "restarting" : "shutting down";
+    private string ActionWord(StopKind kind) => kind == StopKind.Restart ? _config.RestartAction : _config.ShutdownAction;
 
-    private static string Describe(StopKind kind) => kind switch
+    private static string Describe(StopKind kind, bool update = false) => kind switch
     {
-        StopKind.Restart => "restart",
+        StopKind.Restart => update ? "restart and update" : "restart",
         StopKind.Quit => "shutdown and exit",
         _ => "shutdown",
     };
@@ -716,6 +823,7 @@ public sealed class Supervisor
         "  start              start the server\n" +
         "  stop [--now]       warn players, stop the server and back up the world\n" +
         "  restart [--now]    warn players, stop, back up and start again\n" +
+        "  update [--now]     like restart, and update the server with SteamCMD while it is down\n" +
         "  quit [--now]       like stop, then exit the tool\n" +
         "  cancel             cancel a scheduled stop or restart\n" +
         "  say <message>      show a message to every player\n" +

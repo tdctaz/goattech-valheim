@@ -53,7 +53,7 @@ public sealed class ServerProcess : IDisposable
             AddDoorstop(info, config.ServerDir);
         }
 
-        foreach ((string key, string value) in config.Environment)
+        foreach ((string key, string value) in config.EnvironmentVariables())
         {
             info.Environment[key] = value;
         }

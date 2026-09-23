@@ -17,7 +17,7 @@ public static class Backups
     {
         string saveDir = config.SaveDir();
         string worlds = Path.Combine(saveDir, "worlds_local");
-        string world = config.Server.World;
+        string world = config.World;
         string worldDir = Path.Combine(worlds, world);
         string[] files =
         {
@@ -45,7 +45,7 @@ public static class Backups
 
             AddDirectory(zip, Path.Combine(saveDir, "characters_serverauthority"), "characters_serverauthority");
 
-            foreach (string extra in config.ExtraBackupPaths)
+            foreach (string extra in config.ExtraBackupPathList())
             {
                 string full = config.Resolve(extra);
                 string name = Path.GetFileName(full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
@@ -90,6 +90,7 @@ public static class Backups
     public static void PruneServerLogs(ToolConfig config)
     {
         Prune(LogsDir(config), "server-*.log", config.ServerLogsToKeep);
+        Prune(LogsDir(config), "steamcmd-*.log", config.ServerLogsToKeep);
     }
 
     private static void WriteSummary(string logPath, string summaryPath, int exitCode, TimeSpan ranFor)

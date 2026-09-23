@@ -92,7 +92,7 @@ Runs the dedicated server, see [valheim-server-tool](valheim-server-tool/README.
 
  - Start, stop and restart the server, from its window or another terminal
  - Crashes are detected, the logs kept for analysis and the server restarted
- - Daily restart at 05:00 with a world backup
+ - Daily restart at 05:00 with a world backup and a SteamCMD update
  - Players are warned 15, 10, 5, 2 and 1 minutes before the server stops
 
 ## Releasing

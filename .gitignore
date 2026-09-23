@@ -11,3 +11,5 @@ decomp/
 *.dll
 
 release/
+
+valheim-server-tool/publish/

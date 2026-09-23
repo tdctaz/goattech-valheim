@@ -173,6 +173,13 @@ client, so `devcommands` and `spawn` cannot be used from a connected client no m
 It is a cheat hook whose only authentication is filesystem access to the server. Leave it off
 except while testing.
 
+### Seed for a new world
+
+The dedicated server always gives a new world a random seed and has no option to choose one. Server
+Authority adds one: start the server with `-seed <seed>` and a world created on that start gets it.
+An existing world is not touched. The [server tool](../valheim-server-tool/README.md) always passes the
+world name, so a world's seed is its name.
+
 ## Mod validation and server side characters
 
 Both features are configured on the server only. The client's own copy of these settings does

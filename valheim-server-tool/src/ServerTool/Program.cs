@@ -14,56 +14,67 @@ for (int i = 0; i < args.Length; i++)
     }
 }
 
-configPath ??= File.Exists("servertool.json")
-    ? "servertool.json"
-    : Path.Combine(AppContext.BaseDirectory, "servertool.json");
+configPath ??= File.Exists("servertool.cfg")
+    ? "servertool.cfg"
+    : Path.Combine(AppContext.BaseDirectory, "servertool.cfg");
+string fullConfigPath = Path.GetFullPath(configPath);
 
 string verb = words.Count > 0 ? words[0].ToLowerInvariant() : "help";
 
 if (verb is "help" or "-h" or "--help" or "?")
 {
-    Console.WriteLine("Usage: ValheimServerTool [--config servertool.json] <command>");
+    Console.WriteLine("Usage: ValheimServerTool [--config servertool.cfg] <command>");
     Console.WriteLine();
-    Console.WriteLine("  init               write a default servertool.json to edit");
     Console.WriteLine("  run                start the server and keep watching it, until 'quit'");
+    Console.WriteLine("                     the first run writes servertool.cfg for you to fill in");
     Console.WriteLine();
     Console.WriteLine("Sent to a running 'run', or typed into its window:");
     Console.WriteLine(Supervisor.Help);
     return 0;
 }
 
-if (verb == "init")
+if (!File.Exists(fullConfigPath))
 {
-    if (File.Exists(configPath))
+    if (verb != "run")
     {
-        Console.Error.WriteLine($"{Path.GetFullPath(configPath)} already exists.");
+        Console.Error.WriteLine($"No config at {fullConfigPath}. Start the tool with 'ValheimServerTool run' to create one.");
         return 1;
     }
 
-    ToolConfig.WriteDefault(configPath);
-    Console.WriteLine($"Wrote {Path.GetFullPath(configPath)}. Edit it, then run: ValheimServerTool run");
+    ToolConfig.WriteDefault(fullConfigPath);
+    Console.WriteLine($"Wrote a new config to {fullConfigPath}");
+    Console.WriteLine();
+    Console.WriteLine("Every setting in it is explained, with its default and the values it accepts.");
+    Console.WriteLine("At the least, set Name, World and Password under [Server], then run the tool again.");
     return 0;
-}
-
-if (!File.Exists(configPath))
-{
-    Console.Error.WriteLine($"No config at {Path.GetFullPath(configPath)}. Create one with: ValheimServerTool init");
-    return 1;
 }
 
 ToolConfig config;
 try
 {
-    config = ToolConfig.Load(configPath);
+    config = ToolConfig.Load(fullConfigPath);
 }
-catch (Exception e)
+catch (Exception e) when (e is InvalidDataException or IOException or UnauthorizedAccessException)
 {
-    Console.Error.WriteLine($"Could not read {Path.GetFullPath(configPath)}: {e.Message}");
+    Console.Error.WriteLine($"{fullConfigPath} has problems:");
+    Console.Error.WriteLine(e.Message);
     return 1;
 }
 
 if (verb == "run")
 {
+    List<string> problems = config.StartupProblems().ToList();
+    if (problems.Count > 0)
+    {
+        Console.Error.WriteLine($"Not starting. Fix these in {fullConfigPath}:");
+        foreach (string problem in problems)
+        {
+            Console.Error.WriteLine("  " + problem);
+        }
+
+        return 1;
+    }
+
     if (await ControlChannel.IsRunningAsync(config))
     {
         Console.Error.WriteLine($"A server tool for instance '{config.InstanceName}' is already running. Send it commands instead, for example: ValheimServerTool status");
