@@ -1,0 +1,147 @@
+Server Authority: settings and diagnostics
+==========================================
+
+Everything below lives in BepInEx\config\valheim.server_authority.cfg on the
+server. Changing it needs a server restart; the file is read once at startup.
+
+
+IS IT ACTUALLY WORKING?
+-----------------------
+
+With StatusIntervalSeconds set, the log prints a line like:
+
+    Server Authority: 3 player(s), simulating 1840 object(s) of 5200 nearby,
+    2 ownership change(s) this tick.
+
+  simulating N     objects the server owns and is running. If this is zero
+                   while players are online, the mod is not doing its job.
+  of M nearby      objects in the wider scan area. M is always larger than N;
+                   the outer ring is deliberately left alone, same as vanilla.
+  ownership changes usually a handful. Hundreds every tick, sustained, means
+                   something is fighting over ownership and is worth reporting.
+
+The shipped default is 60 seconds, which is cheap enough to leave on always.
+
+
+THE SETTINGS
+------------
+
+[Ownership]
+
+Mode
+    Always  - the server simulates everything. This is the mod.
+    Vanilla - ownership untouched. Use this to test whether a problem is
+              caused by this mod. Everything else still loads.
+
+ServerOwnsWaterborne
+    Lets the server own boats and floating objects. Leave false. True was what
+    destroyed boats during development, by the server and the person steering
+    taking turns simulating the same hull.
+
+[Performance]
+
+ServerFrameRate
+    Valheim hardcodes 30 for a dedicated server, which was fine when the
+    server only relayed data. Now that it simulates, that cap is the floor on
+    how fast it answers anything: an interaction waits up to a whole frame to
+    be noticed. 60 fixed clearly noticeable pickup lag in testing. It costs
+    CPU, roughly doubling it. Lower it to 30 if the machine struggles, raise
+    it to 120 if interactions feel sluggish and the CPU has headroom.
+
+ZdoSendRate
+    How often the server flushes object updates to each client, in Hz. Vanilla
+    is 20. Raising it makes things the server spawns, such as the items a
+    picked bush drops, appear sooner, at the cost of bandwidth per client.
+
+MaxObjectsCreatedPerFrame
+    Lower if the server stutters when players explore quickly. Raise if
+    players outrun the world loading in around them.
+
+ZoneEvictionsPerTick
+    0 means scale with the number of players, which is what you want. Vanilla
+    unloads at most one zone per tick, which was written for one player and
+    leaks zones when several are spread out.
+
+[Vehicles]
+
+KeepShipOwnedByDriver, KeepVehiclesOwnedByUser
+    Keep ships with whoever is steering, and mounts and carts with whoever is
+    using them. Leave both true. Turning them off makes those things answer
+    input a round trip late, and in the case of carts detach entirely.
+
+[Debug]
+
+LogOwnershipChanges, LogShipState, LogNearestWaterOnJoin and EnableSpawnRequests,
+with the spawn hook below, exist only in a build made with -p:DebugTools=true.
+A normal build ignores them.
+
+StatusIntervalSeconds
+    See above. 60 is a good default, 0 turns it off.
+
+LogOwnershipChanges
+    A line for every single ownership change. Very noisy, and on a busy server
+    it will dominate the log. Turn on only when chasing a specific problem,
+    and turn it off again.
+
+LogShipState
+    Ship owner, crew count, speed, height and water level twice a second, plus
+    a line on every ownership change. This is what found the boat bug. Only
+    useful for boat problems.
+
+LogNearestWaterOnJoin
+    One line per player on join saying where the nearest sailable water is.
+    Useful when someone needs to test boats on an unfamiliar world.
+
+EnableSpawnRequests
+    A cheat hook. See below. Off by default and should stay off during a real
+    session, because its only protection is file access to the server machine.
+
+
+THE SPAWN HOOK
+--------------
+
+Valheim refuses client cheat commands on a dedicated server: devcommands and
+spawn do nothing for a connected player, whatever their admin status, because
+the check is "am I the server" and a client never is. So there is no in-game
+way to hand somebody a cart to test with.
+
+With EnableSpawnRequests = true, the server watches this file:
+
+    BepInEx\config\serverauthority_spawn.txt
+
+Write one instruction per line, save, and within a couple of seconds the
+server acts on it and empties the file.
+
+    Karve 1              spawn one Karve next to the first connected player
+    Wood 50              fifty wood, stacked sensibly
+    Cart 1               a cart
+    water                log where the nearest sailable water is
+    diag                 log what the server can see of the water here
+    owners               log what the server owns nearby, by prefab name
+
+"owners" is the honest answer to "is this actually server side", which is
+otherwise a matter of inference.
+
+Turn this off before letting other people on the server.
+
+
+READING A CRASH
+---------------
+
+The important thing to know is that a crash here may write no error at all.
+The failure that killed the server during development was a Mono abort, which
+terminates the process rather than raising an exception. The log just stops.
+
+So do not judge health by the absence of exceptions in the log. That is why
+the watchdog exists: it watches the exit code, which is the only reliable
+signal, and preserves the log when it is non-zero.
+
+In CRASH-<time>-summary.txt, the lines worth finding:
+
+    Caught fatal signal            the process was killed, not shut down
+    Assertion at <file>:<line>     a Mono internal check failed, usually the
+                                   real end of the story
+    ...Exception...                whatever was thrown just before
+
+The last exception before the fatal signal is usually the cause, and the
+assertion is usually just the runtime falling over while reporting it.

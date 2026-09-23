@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>ServerAuthority</AssemblyName>
+    <RootNamespace>ServerAuthority</RootNamespace>
+    <GenerateModVersion>true</GenerateModVersion>
+    <LangVersion>latest</LangVersion>
+    <DebugType>embedded</DebugType>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <AssemblyTitle>Valheim Server Authority</AssemblyTitle>
+    <Description>Moves world simulation ownership from clients to the dedicated server.</Description>
+    <NoWarn>$(NoWarn);CS0649;MSB3277</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="BepInEx.Core" Version="5.4.21" PrivateAssets="all" />
+    <PackageReference Include="HarmonyX" Version="2.10.2" PrivateAssets="all" />
+    <PackageReference Include="BepInEx.AssemblyPublicizer.MSBuild" Version="0.4.2" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!--
+    Publicize=true rewrites a private copy of the game assembly so the mod can call the
+    private members it needs (ZNetScene.CreateObject, ZoneSystem.PokeLocalZone, and so on)
+    without reflection. The rewritten copy stays in obj/ and is never redistributed.
+  -->
+  <ItemGroup>
+    <Reference Include="assembly_valheim" Publicize="true" Private="false">
+      <HintPath>$(ValheimManaged)/assembly_valheim.dll</HintPath>
+    </Reference>
+    <Reference Include="assembly_utils" Publicize="true" Private="false">
+      <HintPath>$(ValheimManaged)/assembly_utils.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine" Private="false">
+      <HintPath>$(ValheimManaged)/UnityEngine.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule" Private="false">
+      <HintPath>$(ValheimManaged)/UnityEngine.CoreModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.PhysicsModule" Private="false">
+      <HintPath>$(ValheimManaged)/UnityEngine.PhysicsModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.ParticleSystemModule" Private="false">
+      <HintPath>$(ValheimManaged)/UnityEngine.ParticleSystemModule.dll</HintPath>
+    </Reference>
+    <Reference Include="Splatform" Private="false">
+      <HintPath>$(ValheimManaged)/Splatform.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.TextMeshPro" Private="false">
+      <HintPath>$(ValheimManaged)/Unity.TextMeshPro.dll</HintPath>
+    </Reference>
+    <Reference Include="MagicaClothV2" Private="false">
+      <HintPath>$(ValheimManaged)/MagicaClothV2.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <!--
+    Set VALHEIM_PLUGINS to a BepInEx plugins folder to have each build land there directly,
+    which makes the edit / restart server / test loop short.
+  -->
+  <Target Name="DeployToServer" AfterTargets="Build" Condition="'$(VALHEIM_PLUGINS)' != ''">
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(VALHEIM_PLUGINS)" />
+    <Message Importance="high" Text="Deployed $(TargetFileName) to $(VALHEIM_PLUGINS)" />
+  </Target>
+
+</Project>

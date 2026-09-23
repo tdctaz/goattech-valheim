@@ -1,0 +1,21 @@
+<Project>
+
+  <PropertyGroup>
+    <GoatTechVersionFile>$(MSBuildThisFileDirectory)VERSION</GoatTechVersionFile>
+    <Version>$([System.IO.File]::ReadAllText('$(GoatTechVersionFile)').Trim())</Version>
+  </PropertyGroup>
+
+  <Target Name="GenerateModVersion" BeforeTargets="BeforeCompile" Condition="'$(GenerateModVersion)' == 'true'">
+    <PropertyGroup>
+      <ModVersionFile>$(IntermediateOutputPath)ModVersion.g.cs</ModVersionFile>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(ModVersionFile)"
+                      Lines="namespace $(RootNamespace) { internal static class ModVersion { internal const string Value = &quot;$(Version)&quot;%3B } }"
+                      Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <Compile Include="$(ModVersionFile)" />
+      <FileWrites Include="$(ModVersionFile)" />
+    </ItemGroup>
+  </Target>
+
+</Project>

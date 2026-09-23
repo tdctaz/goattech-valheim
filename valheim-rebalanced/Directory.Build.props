@@ -1,0 +1,34 @@
+<Project>
+
+  <Import Project="$(MSBuildThisFileDirectory)../Version.props" />
+
+  <!--
+    Resolves the directory holding the game's managed assemblies. Override with the
+    VALHEIM_MANAGED environment variable, or by passing -p:ValheimManaged=/path/to/Managed.
+
+    Either the client or the dedicated server install works. assembly_valheim.dll is the
+    same in both.
+  -->
+  <PropertyGroup>
+    <ValheimManaged Condition="'$(ValheimManaged)' == '' and '$(VALHEIM_MANAGED)' != ''">$(VALHEIM_MANAGED)</ValheimManaged>
+
+    <_SteamRoot1>$(HOME)/.local/share/Steam/steamapps/common</_SteamRoot1>
+    <_SteamRoot2>$(HOME)/.steam/steam/steamapps/common</_SteamRoot2>
+
+    <ValheimManaged Condition="'$(ValheimManaged)' == '' and Exists('$(_SteamRoot1)/Valheim/valheim_Data/Managed')">$(_SteamRoot1)/Valheim/valheim_Data/Managed</ValheimManaged>
+    <ValheimManaged Condition="'$(ValheimManaged)' == '' and Exists('$(_SteamRoot1)/Valheim dedicated server/valheim_server_Data/Managed')">$(_SteamRoot1)/Valheim dedicated server/valheim_server_Data/Managed</ValheimManaged>
+    <ValheimManaged Condition="'$(ValheimManaged)' == '' and Exists('$(_SteamRoot2)/Valheim/valheim_Data/Managed')">$(_SteamRoot2)/Valheim/valheim_Data/Managed</ValheimManaged>
+    <ValheimManaged Condition="'$(ValheimManaged)' == '' and Exists('$(_SteamRoot2)/Valheim dedicated server/valheim_server_Data/Managed')">$(_SteamRoot2)/Valheim dedicated server/valheim_server_Data/Managed</ValheimManaged>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <DebugTools Condition="'$(DebugTools)' == ''">false</DebugTools>
+    <DefineConstants Condition="'$(DebugTools)' == 'true'">$(DefineConstants);DEBUG_TOOLS</DefineConstants>
+  </PropertyGroup>
+
+  <Target Name="CheckValheimManaged" BeforeTargets="BeforeBuild">
+    <Error Condition="'$(ValheimManaged)' == '' or !Exists('$(ValheimManaged)/assembly_valheim.dll')"
+           Text="Could not find Valheim's managed assemblies. Set the VALHEIM_MANAGED environment variable to the folder containing assembly_valheim.dll (for example ~/.local/share/Steam/steamapps/common/Valheim/valheim_Data/Managed)." />
+  </Target>
+
+</Project>
