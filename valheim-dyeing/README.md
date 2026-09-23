@@ -1,5 +1,7 @@
 # Valheim Dyeing
 
+**THIS MOD IS WIP AND NOT REALLY WORKING (it looks like shit)**
+
 A dyeing tub you can build, and recipes that take a piece of bronze armor and a handful of something
 colourful and give the armor back in that colour. Installed on the dedicated server and on every
 client.
