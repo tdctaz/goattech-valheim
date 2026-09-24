@@ -28,6 +28,10 @@ cd valheim-server-tool/src/ServerTool
 dotnet publish -c Release -o ../../publish
 ```
 
+The version comes from the `VERSION` file at the top of the repository, shared with the mods. The
+release script at `release/release.sh` builds the tool for both Windows and Linux and puts it in the
+server zip's `servertool` folder.
+
 For a Windows server without .NET installed, publish self-contained instead:
 
 ```

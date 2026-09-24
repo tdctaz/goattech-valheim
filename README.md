@@ -73,6 +73,17 @@ Server and every client.
  - Raids come in waves, scaled by players online and base comfort, and end only when cleared
  - Stars above two get their own size and crature tint
 
+### Valheim Server Tool
+
+Runs the dedicated server on Windows and Linux. Needs the .NET 10 runtime. See
+`valheim-server-tool/README.md`.
+
+ - Restarts the server after a crash and keeps the logs and configs from every crash
+ - Restarts once a day (05:00 by default), backs up the world and updates Valheim with SteamCMD
+   while it is down, so the server keeps up with game patches
+ - Warns every player on screen 15, 10, 5, 2 and 1 minutes before a stop, through Server Authority
+ - `status`, `say`, `restart`, `update`, `stop` and friends from the tool's window or another terminal
+
 ### GoatTech Dyeing
 
 Server and every client. Experimental.
@@ -97,16 +108,16 @@ Runs the dedicated server, see [valheim-server-tool](valheim-server-tool/README.
 
 ## Releasing
 
-The three mods that make up a release (Server Authority, Rebalanced and Creatures) always share one
-version number, and the server refuses any client whose mods differ from its own. Dyeing is not part
-of the release.
+A release is the three mods (Server Authority, Rebalanced and Creatures) plus Valheim Server Tool,
+all sharing one version number. The server refuses any client whose mods differ from its own. Dyeing
+is not part of the release.
 
 ### Where the version lives
 
-The `VERSION` file at the top of this folder is the only place the version is written. Each mod's
-`Directory.Build.props` imports `Version.props`, which reads `VERSION` into the assembly version and
-generates a `ModVersion.Value` constant that feeds `[BepInPlugin]` and the client handshake. Never
-put a version number anywhere else.
+The `VERSION` file at the top of this folder is the only place the version is written. The
+`Directory.Build.props` of each mod and of the server tool imports `Version.props`, which reads
+`VERSION` into the assembly version. For the mods it also generates a `ModVersion.Value` constant
+that feeds `[BepInPlugin]` and the client handshake. Never put a version number anywhere else.
 
 Use `MAJOR.MINOR.PATCH`. Any change that touches game behaviour or the network protocol needs a new
 version, since that is what forces every player onto the new client package.
@@ -124,16 +135,19 @@ says. It then:
    `release/cache/`, once.
 2. Builds the three mods from scratch in Release with `-p:DebugTools=false`, and fails if a DLL does
    not carry the version or still contains a debug-only type.
-3. Writes to `dist/`:
+3. Publishes Valheim Server Tool for Windows (`ValheimServerTool.exe`) and Linux
+   (`ValheimServerTool`) as single files that use the installed .NET 10 runtime.
+4. Writes to `dist/`:
    - `GoatTech-Valheim-client-<version>.zip`: BepInEx, the three mods, and install steps for Windows,
      native Linux and Proton.
-   - `GoatTech-Valheim-server-<version>.zip`: BepInEx, the three mods, the Windows watchdog, tail and
-     log collection scripts, a Linux watchdog, and a starting `valheim.server_authority.cfg` that
-     turns on mod validation and server side characters.
+   - `GoatTech-Valheim-server-<version>.zip`: BepInEx, the three mods, the server tool in
+     `servertool/`, the simpler Windows and Linux watchdog scripts as an alternative, and a starting
+     `valheim.server_authority.cfg` that turns on mod validation and server side characters.
    - `GoatTech-Valheim-<version>.sha256` with checksums for both.
 
 Both zips work on Windows and Linux alike. The Windows files (`winhttp.dll`, `doorstop_config.ini`,
-`.bat`, `.ps1`) and the Linux files (`doorstop_libs`, `start_*_bepinex.sh`, `.sh`) sit side by side,
+`.bat`, `.ps1`, `ValheimServerTool.exe`) and the Linux files (`doorstop_libs`, `start_*_bepinex.sh`,
+`.sh`, `ValheimServerTool`) sit side by side,
 and each platform ignores the other's. Build on Linux so the `.sh` files keep their executable bit
 in the zip.
 
@@ -141,12 +155,14 @@ in the zip.
 
 1. Update the "Detailed changes" above for anything players will notice.
 2. `./release/release.sh <new version>`.
-3. Test on a server: install the server zip, join with the client zip, and check that
+3. Test on a server: install the server zip, start it with the server tool, join with the client
+   zip, check that `ValheimServerTool say hello` shows on screen, and check that
    `BepInEx/LogOutput.log` on both sides lists all three mods at the new version and that the server
    log says `Server Authority active. Ownership mode: Always.`
-4. Hand out both zips. Existing servers only replace the three DLLs in `BepInEx/plugins` and
-   `GoatTech-VERSION.txt`; the server README says the same, so nobody overwrites their own config
-   or watchdog settings.
+4. Hand out both zips. Existing servers only replace the three DLLs in `BepInEx/plugins`, the two
+   server tool executables and `GoatTech-VERSION.txt`; the server README says the same, so nobody
+   overwrites their own config or watchdog settings. `servertool.cfg` is never shipped, and the tool
+   adds new settings to it by itself.
 
 ### Files
 
@@ -160,6 +176,7 @@ in the zip.
 | `release/server/ServerAuthority-watchdog.sh` | Linux server launcher with crash capture |
 | `release/server/valheim.server_authority.cfg` | Starting server config for a first install |
 | `valheim-server-side-mod/tools/package/` | Windows server scripts (watchdog, tail, collect logs) |
+| `valheim-server-tool/` | Valheim Server Tool, shipped in the server zip's `servertool/` |
 
 ## Known Bugs
 - None outstanding. The boat that was destroyed while travelling towards the area it is moored in

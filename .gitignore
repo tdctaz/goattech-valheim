@@ -10,6 +10,6 @@ lib/game/
 decomp/
 *.dll
 
-release/
+release/cache/
 
 valheim-server-tool/publish/
