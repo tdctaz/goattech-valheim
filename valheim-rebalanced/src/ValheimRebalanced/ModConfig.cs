@@ -24,6 +24,8 @@ namespace ValheimRebalanced
         internal static ConfigEntry<float> TrollstavHealthCost;
         internal static ConfigEntry<bool> TrollstavLethalHealthCost;
 
+        internal static ConfigEntry<int> BurntWoodCoalDivisor;
+
         internal static void Bind(ConfigFile config)
         {
             RequireClientMod = config.Bind("General", "RequireClientMod", true,
@@ -90,6 +92,15 @@ namespace ValheimRebalanced
                 "Let the health cost kill the caster. Vanilla always leaves them on 1 health, which makes " +
                 "the cost free once they are low enough. A cast that cannot be paid for kills the caster " +
                 "as it leaves the staff, and the troll it paid for still lands. Off is vanilla.");
+
+            BurntWoodCoalDivisor = config.Bind("BurntWood", "CoalDivisor", 5,
+                new ConfigDescription(
+                    "How many wood burnt by spreading fire make one coal, rounded up. Vanilla turns every " +
+                    "Wood, Fine wood, Core wood and Blackwood that a burning piece or log would have dropped " +
+                    "into one coal, so a piece built from 50 wood leaves 50 coal, and with this at 5 leaves 10. " +
+                    "Each resource of a piece and each whole log is rounded on its own. The charcoal kiln " +
+                    "is not affected. 1 is vanilla.",
+                    new AcceptableValueRange<int>(1, 50)));
         }
 
         private static string Describe(string type)

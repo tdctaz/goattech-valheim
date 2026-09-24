@@ -184,6 +184,31 @@ the same way the game does, by counting the summoned trolls already loaded, befo
 caster's life. The eitr and the health vanilla charges are still spent on a refused cast. Only the
 caster's own machine does any of this, and only for a player.
 
+### Burnt wood: a fifth of the coal
+
+Vanilla's spreading fire, the one Ashlands brought, turns wood into coal. When a burning piece
+burns down or a burning log falls apart, every Wood, Fine wood, Core wood and Blackwood it would
+have dropped comes out as one coal instead. That makes setting wood alight a faster, free charcoal
+kiln. Here it takes `BurntWood.CoalDivisor` wood to make a coal, 5 by default, rounded up:
+
+| Wood burnt | Vanilla | Rebalanced |
+| --- | --- | --- |
+| 1 | 1 coal | 1 coal |
+| 4 | 4 coal | 1 coal |
+| 50 | 50 coal | 10 coal |
+| 51 | 51 coal | 11 coal |
+
+The conversion is a single table on the game object, `Game.m_damageTypeDropConversions`, and the
+game reads it from `Game.CheckDropConversion` whenever a burnt piece drops its resources or a burnt
+log drops its wood. The mod cuts the count that call returns whenever the result is coal. A piece
+rounds each of its resources on its own, as vanilla drops them. A log asks once per piece of wood,
+so the mod adds them up across the whole log and rounds the total.
+
+The charcoal kiln is a separate smelter with its own 1 wood to 1 coal conversion and is not
+touched, and nor is the Obliterator, which has its own table. The drop is made by whoever owns the
+burning object, the server under Server Authority, and it logs each conversion with its wood and coal
+counts.
+
 ## Configuration
 
 Written to `BepInEx/config/valheim.rebalanced.cfg` on first run. Only the server's copy matters
@@ -203,6 +228,7 @@ while connected to a server; a client's own copy applies in single player and wh
 | `Trollstav.MaxSummons` | `1` | Summoned trolls loaded at once. 2 is vanilla. |
 | `Trollstav.HealthCost` | `60` | The least health a cast costs, against vanilla's 60% of current health. 0 is vanilla. |
 | `Trollstav.LethalHealthCost` | `true` | Let the cost kill the caster. `false` is vanilla. |
+| `BurntWood.CoalDivisor` | `5` | Wood burnt by spreading fire per coal, rounded up. 1 is vanilla. |
 
 A rejected player sees the game's own "incompatible version" message, and the server log says why.
 
@@ -243,6 +269,7 @@ src/ValheimRebalanced/
   StaffOfEmbers.cs     Halves the staff's blunt damage and leaves its fire alone
   StaffOfFracturing.cs Halves the staff's fire damage and leaves its blunt alone
   Trollstav.cs         One troll at a time, and a health cost that can kill the caster
+  BurntWood.cs         A fifth of the coal from wood burnt by spreading fire
   Patches/             Harmony hooks
 tools/PatchCheck/      Resolves every patch target against the game assembly
 BACKLOG.md             Designed changes not built yet

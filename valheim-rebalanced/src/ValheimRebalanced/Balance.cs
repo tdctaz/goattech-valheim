@@ -13,12 +13,14 @@ namespace ValheimRebalanced
         internal int TrollstavMaxSummons;
         internal float TrollstavHealthCost;
         internal bool TrollstavLethalHealthCost;
+        internal int BurntWoodCoalDivisor;
 
         internal static readonly Balance Vanilla = new Balance
         {
             StaffOfEmbersBlunt = 1f,
             StaffOfFracturingFire = 1f,
             TrollstavMaxSummons = 2,
+            BurntWoodCoalDivisor = 1,
         };
 
         internal static Balance FromConfig()
@@ -36,6 +38,7 @@ namespace ValheimRebalanced
                 TrollstavMaxSummons = ModConfig.TrollstavMaxSummons.Value,
                 TrollstavHealthCost = ModConfig.TrollstavHealthCost.Value,
                 TrollstavLethalHealthCost = ModConfig.TrollstavLethalHealthCost.Value,
+                BurntWoodCoalDivisor = ModConfig.BurntWoodCoalDivisor.Value,
             };
         }
 
@@ -52,6 +55,7 @@ namespace ValheimRebalanced
             package.Write(TrollstavMaxSummons);
             package.Write(TrollstavHealthCost);
             package.Write(TrollstavLethalHealthCost);
+            package.Write(BurntWoodCoalDivisor);
         }
 
         internal static Balance Read(ZPackage package)
@@ -69,6 +73,7 @@ namespace ValheimRebalanced
                 TrollstavMaxSummons = package.ReadInt(),
                 TrollstavHealthCost = package.ReadSingle(),
                 TrollstavLethalHealthCost = package.ReadBool(),
+                BurntWoodCoalDivisor = package.ReadInt(),
             };
         }
 
@@ -80,7 +85,7 @@ namespace ValheimRebalanced
                    $"staff of embers blunt multiplier {StaffOfEmbersBlunt}, " +
                    $"staff of fracturing fire multiplier {StaffOfFracturingFire}, " +
                    $"trollstav summons {TrollstavMaxSummons}, least health cost {TrollstavHealthCost}, " +
-                   $"lethal {TrollstavLethalHealthCost}";
+                   $"lethal {TrollstavLethalHealthCost}, wood per burnt coal {BurntWoodCoalDivisor}";
         }
     }
 }
