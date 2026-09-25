@@ -1,4 +1,4 @@
-Server Authority, for Valheim dedicated server 1.0.15
+Server Authority, for Valheim dedicated server 1.0.16
 =====================================================
 
 Moves world simulation off the players and onto the server. Normally Valheim
@@ -19,7 +19,7 @@ losing. Take a copy of your world before you start:
 
     %USERPROFILE%\AppData\LocalLow\IronGate\Valheim\worlds_local
 
-The server it runs on must be Valheim 1.0.15. The mod checks this on startup
+The server it runs on must be Valheim 1.0.16. The mod checks this on startup
 and writes a loud warning in the log if the versions do not match.
 
 

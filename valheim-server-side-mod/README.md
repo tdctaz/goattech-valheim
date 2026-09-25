@@ -19,7 +19,7 @@ game, as do [mod validation and server side characters](#mod-validation-and-serv
 A vanilla client can still connect and play; it simply keeps vanilla's wave behaviour, and the boats
 it renders will not sit in the sea the way the server floats them.
 
-> **Status: early alpha.** Ported to Valheim **1.0.15** and now **running on a live dedicated
+> **Status: early alpha.** Ported to Valheim **1.0.16** and now **running on a live dedicated
 > server**. Creature AI, combat, drops and item pickup are confirmed working with the server
 > owning simulation. Not yet tested with two players in one area, which is the case the whole
 > design exists for. See [Game updates](#game-updates).

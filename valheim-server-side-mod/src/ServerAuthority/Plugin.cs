@@ -18,7 +18,7 @@ namespace ServerAuthority
         /// mod, because most releases do not touch the methods we replace, but it is logged loudly
         /// so that an unexplained problem after a game update has an obvious first suspect.
         /// </summary>
-        public const string VerifiedGameVersion = "1.0.15";
+        public const string VerifiedGameVersion = "1.0.16";
 
         internal static ManualLogSource Log;
         internal static Harmony Harmony;

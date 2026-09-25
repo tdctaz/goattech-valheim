@@ -261,3 +261,28 @@ ZoneSystem awakens afterwards its copy stays at the default of zero, and since `
 `CreateGhostZones` and `IsActiveAreaLoaded` all size themselves from that copy, the server would
 build only the zone each player stands in. The mod applies it explicitly in a `ZoneSystem.Start`
 postfix.
+
+
+## 7. Re-verification against Valheim 1.0.16
+
+A small patch. Diffing the publicized 1.0.15 and 1.0.16 assemblies changes 19 files, and none of the
+methods any GoatTech mod patches or replaces is among them. `PatchCheck` resolves every target for
+all four mods against both the client and the dedicated server assemblies.
+
+What moved that touches the server's simulation:
+
+- `SpawnSystem.UpdateSpawnList` now counts what it spawned earlier in the same call against
+  `m_maxSpawned`, because the nearby-ZDO list it counts from is only gathered once. The mod's
+  `UpdateSpawning` replacement calls vanilla's `UpdateSpawnList`, so it gets the fix unchanged.
+- `Fireplace.UpdateSnowMelt` and `TreeLog.UpdateSnow` now run only on the owner, and only when every
+  heightmap under the terrain op has a terrain compiler
+  (`TerrainComp.ValidTCForAllAffectedHeightmaps`). Previously every client placed its own snow
+  terrain ops. With the server owning both, only the server places them, which it can because it
+  builds heightmaps around every player.
+- `TerrainComp.Awake` no longer destroys a duplicate compiler at once. It records both and
+  `TerrainComp.Start` keeps the one with the most operations.
+- `ItemStand.SetVisualItem` writes the item back into the ZDO when run by the owner, and
+  `ArmorStand`'s `RPC_SetVisualItem` now sends the item as a hash rather than a name.
+- `Player.UpdateBaseValue` records the max comfort stat on every check rather than only when the
+  base value changes.
+- `ObjectDB.GetAllFoodItems` takes an exclusion list. No mod calls it.
