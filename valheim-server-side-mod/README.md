@@ -1517,6 +1517,51 @@ A ninth moves the server's copy of a player instead of the player:
    server-owned creatures, such as tames standing nearby, by writing to the client's own copy of
    them, and the push is lost.
 
+A tenth reads a player's status effects where only their own client has them:
+
+10. **Status effects the server cannot see.** `SEMan` keeps a character's list of active status
+    effects only on its owner; every other machine sees at most the attribute bitmask in the ZDO.
+    Two creature checks read that list for players. `MonsterAI.PheromoneFleeCheck`, run by the
+    owner when an alerted creature can see its target and has it within attack range, looks
+    through the target player's effects for an `SE_Stats` with `m_pheromoneFlee` whose
+    `m_pheromoneTarget` has the creature's name, and makes the creature flee and pick a new target
+    later. `Character.UpdatePheromones`, run by the
+    owner every 5 s on creatures that have a `m_pheromoneLoveEffect`, looks through every player's
+    effects for an `SE_Stats` whose `m_pheromoneTarget` has the creature's name, and plays the
+    effect and alerts the creature once for each. In the game data the first is the Anti-Sting
+    Concoction (`Potion_BugRepellent`, deathsquitos) and the second the troll love potion
+    (`Potion_TrollPheromones`, trolls, whose love effect `fx_troll_love` is networked). In vanilla
+    the owner is normally the client of the player drinking it, so it works for that player. Here
+    the server owns every creature and its copy of each player has an empty list, so neither mead
+    ever did anything.
+
+    `PlayerEffects.cs` has each client publish its active pheromone effects on its own player's ZDO,
+    which it owns, as a list of name hashes under one key. It builds the list after every
+    `SEMan.Update` on its own player, the same place vanilla updates the attribute bitmask, and
+    writes only when the list changes, so an effect that expires, is removed or ends with the
+    player's death drops out on the next update. It tracks the ZDO by id, since ZDOs are pooled,
+    so a new character after death or a relog starts from nothing. It publishes nothing else,
+    because the cost is not the write but every send afterwards: Valheim
+    serialises a ZDO's whole data each time it sends it, and a player's ZDO is sent continuously
+    as they move, so anything published rides along on every update to every peer. With only the
+    meads, the key does not exist for a player who has never drunk one. When the list empties it is
+    written as an empty array rather than removed, because a receiving machine merges incoming ZDO
+    data into what it has and never deletes a key, and `ZDO.RemoveByteArray` does not even mark the
+    ZDO changed, so a removed key would linger on the server with the last list. The client logs
+    each pheromone effect entering and leaving the list.
+
+    `Pheromones.cs` extends both checks on the server with postfixes, for players it does not own.
+    It maps each published hash to the `SE_Stats` in `ObjectDB`, where both meads are registered,
+    and applies vanilla's test to it: fleeing needs `m_pheromoneFlee` and the target player's own
+    list, and attraction runs on the same 5 s tick, found by repeating vanilla's timer test in a
+    prefix. Attraction differs from the literal code in one respect. Vanilla looks at every player,
+    but only the owner's own player ever has a list, and the owner is a player whose area the
+    creature is in. The server sees everyone, so it counts only players whose active area holds the
+    creature; otherwise one player's potion would draw trolls near every other player in the world.
+    The first flee and the first attraction of each creature prefab per session are logged, and
+    so, once a session, is a published hash that is not a pheromone effect in `ObjectDB`, which
+    would mean a game update renamed or unregistered a mead and it silently stopped working.
+
 To find more after a game update, scan the decompiled source for `Player.m_localPlayer`
 dereferences inside `RPC_*` methods that have no null guard, then check how each RPC is invoked:
 ones sent to a specific peer are client-only and safe, while owner-targeted and `Everybody` ones
@@ -1579,6 +1624,8 @@ src/ServerAuthority/
   CookingCollect.cs       Collects from cooking stations on the server, crediting the collecting player
   StatCredit.cs           Counts a stat, item craft or skill gain for one player, sent by the server
   PlayerLaunch.cs         Sends a launch aimed at the server's copy of a player to their client
+  PlayerEffects.cs        Publishes each player's active pheromone effects on their own ZDO
+  Pheromones.cs           Lets the anti-sting and troll love meads work on server-owned creatures
   SummonSkill.cs          Sends a summon's skill gain to its summoner's own client
   EarnedStats.cs          Sends chopping, mining, hit and taming stats to the player who earned them
   RpcTakeover.cs          Replaces a vanilla RPC handler on the server with one that wraps or redoes it

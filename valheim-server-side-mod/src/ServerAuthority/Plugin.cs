@@ -118,6 +118,7 @@ namespace ServerAuthority
             TriggerAoeSetup.Reset();
             RpcTakeover.Reset();
             EarnedStats.Reset();
+            Pheromones.Reset();
             SummonSkill.Reset();
             Plugin.EvaluateSession();
             KillCredit.Register();
