@@ -126,9 +126,11 @@ On a dedicated server, raids come in waves instead of running for a fixed time:
 - A wave is the raid's own spawn: one group of every creature in it, with the raid's group sizes,
   the same as a summoning boss's wave. They appear about 40m from a player inside the raid's area
   and hunt the players. Like vanilla, they never appear inside a player base, the area around a
-  workbench, forge or fire, nor under a roof or overhang. The search reaches out to twice the
-  distance to get clear of a large base, and a wave that still finds no open ground is not used
-  up: it tries again 30 seconds later.
+  workbench, forge or fire, nor under a roof or overhang. Each group gets 40 tries, reaching out
+  to twice the distance to get clear of a large base; a group that still finds no open ground is
+  left out of that wave, and the log says which. A wave that finds no open ground for any group
+  ends the raid at once: a base with nowhere around it to stand is safe, as it is in vanilla,
+  where such a raid spawns nothing.
 - Only one wave is alive at a time. The next wave comes 3 minutes after the last creature of the
   previous one dies. The clock only runs while a player is inside the area, so leaving pauses the
   attack rather than ending it.

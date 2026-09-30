@@ -8,7 +8,6 @@ namespace ValheimCreatures
         private const string RaidsRpc = "ValheimCreatures_Raids";
         private const float SendSeconds = 2f;
         private const float ComfortSearchRadius = 30f;
-        private const float PlacementRetrySeconds = 30f;
 
         private sealed class Raid
         {
@@ -232,18 +231,17 @@ namespace ValheimCreatures
                 {
                     if (waveUp == null)
                     {
-                        if (SpawnWave(raid, players, balance))
+                        if (!SpawnWave(raid, players, balance))
                         {
-                            raid.WaveUp = true;
-                            raid.HeldLogged = false;
-                            waveUp = raid;
+                            Ended.Add(raid);
+                            continue;
                         }
-                        else
-                        {
-                            raid.NextWave = raid.InArea + PlacementRetrySeconds;
-                        }
+
+                        raid.WaveUp = true;
+                        raid.HeldLogged = false;
+                        waveUp = raid;
                     }
-                    else if (!raid.HeldLogged)
+                    else if (waveUp != raid && !raid.HeldLogged)
                     {
                         raid.HeldLogged = true;
                         Plugin.Log.LogInfo(
@@ -288,7 +286,7 @@ namespace ValheimCreatures
             {
                 Plugin.Log.LogInfo(
                     $"Raid {raid.Template.m_name} wave {raid.Spawned + 1} of {raid.Waves} found no open ground outside " +
-                    $"the base; trying again in {PlacementRetrySeconds:0} seconds.{WaveSpawner.Rejected()}");
+                    $"the base, so the raid ends: the base leaves raiders nowhere to stand.{WaveSpawner.Rejected()}");
                 return false;
             }
 

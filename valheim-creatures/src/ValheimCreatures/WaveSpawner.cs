@@ -6,18 +6,25 @@ namespace ValheimCreatures
 {
     internal static class WaveSpawner
     {
-        private const int PlacementTries = 20;
+        private const int PlacementTries = 40;
         private const int MemberTries = 4;
         private const float FarthestReach = 2f;
 
+        private static readonly List<string> Dropped = new List<string>();
+
         private static int _inBase;
         private static int _covered;
+        private static int _water;
+        private static int _noFloor;
 
         internal static List<ZDOID> Spawn(RandomEvent raid, Func<SpawnSystem.SpawnData, Vector3?> groupCenter,
             string source, Character tracker, List<string> names)
         {
             _inBase = 0;
             _covered = 0;
+            _water = 0;
+            _noFloor = 0;
+            Dropped.Clear();
             List<ZDOID> spawned = new List<ZDOID>();
             foreach (SpawnSystem.SpawnData data in raid.m_spawn)
             {
@@ -30,6 +37,11 @@ namespace ValheimCreatures
                 Vector3? center = count > 0 ? groupCenter(data) : null;
                 if (center == null)
                 {
+                    if (count > 0)
+                    {
+                        Dropped.Add(data.m_prefab.name);
+                    }
+
                     continue;
                 }
 
@@ -77,9 +89,16 @@ namespace ValheimCreatures
 
         internal static string Rejected()
         {
-            return _inBase == 0 && _covered == 0
-                ? ""
-                : $" Placement passed over {_inBase} points inside a player base and {_covered} under cover.";
+            string text = Dropped.Count > 0
+                ? $" No open ground for {string.Join(", ", Dropped)}, left out of this wave."
+                : "";
+            if (_inBase + _covered + _water + _noFloor > 0)
+            {
+                text += $" Placement passed over {_inBase} points inside a player base, {_covered} under cover, " +
+                        $"{_water} in water and {_noFloor} with no floor.";
+            }
+
+            return text;
         }
 
         internal static Vector3? Around(Vector3 origin, float distance, SpawnSystem.SpawnData data)
@@ -92,11 +111,13 @@ namespace ValheimCreatures
                 Vector3 point = origin + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * reach;
                 if (!ZoneSystem.instance.FindFloor(point + Vector3.up * 50f, out float height))
                 {
+                    _noFloor++;
                     continue;
                 }
 
                 if (height < ZoneSystem.instance.m_waterLevel + 0.5f)
                 {
+                    _water++;
                     continue;
                 }
 
@@ -118,6 +139,7 @@ namespace ValheimCreatures
                 Vector3 point = center + new Vector3(jitter.x, 0f, jitter.y);
                 if (!ZoneSystem.instance.FindFloor(point + Vector3.up * 50f, out float height))
                 {
+                    _noFloor++;
                     continue;
                 }
 
