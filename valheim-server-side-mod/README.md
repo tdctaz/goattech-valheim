@@ -1314,6 +1314,41 @@ A fourth is just as silent:
    boss dream that `OnDeath` also sets needs nothing: `CinematicsManager.SetDreamCinematic`
    broadcasts to every peer, so each client with a local player keeps it.
 
+A fifth assumes the owner is the victim's machine:
+
+5. **Attacks only the spawner can deal.** A trigger AoE, which is what the breath attacks spawn,
+   damages only characters owned by the machine running that copy of it, and the attack it
+   carries is filled in by `Aoe.Setup`, which runs only on the machine that spawned it. Every other
+   copy keeps the prefab's values. Vanilla gets away with it because a creature's owner is
+   normally the client of the player it is fighting, which both spawns the AoE and owns the player
+   standing in it. Here the creature, and so `Setup`, is on the server, which owns no player, and
+   each client's copy hit its own player with the prefab's values. On `Fenring_attack_flames_aoe`
+   (the Fenring Cultist's flame and frost breath), `BonemawSerpent_breath_aoe` and
+   `fallenvalkyrie_poisonbreath_aoe` those are zero damage, zero push and no status effect, so
+   these breaths did nothing to any player. `shaman_attack_aoe` has the same shape, but the
+   shaman's attack is melee and never spawns it. The Fader's flame breath and the fire its meteors
+   and aspect leave behind (`Fader_Flamebreath_AOE`, `aspect_Fader_Flamebreath_AOE`,
+   `Fader_DroppedFire_AOE`, and `Fader_WallOfFire_AOE` when a meteor drops it) keep their damage on
+   the prefab and did hurt, but with no attacker, and the world's combat modifier, the per-player
+   damage scaling and the world level bonus apply only to a hit whose attacker is known to be a
+   creature. The wall of fire the Fader raises directly comes from a `SpawnAbility`, which never
+   runs `Setup`, so it has no attacker on any machine, in vanilla as here.
+
+   `TriggerAoeSetup.cs` has the server write what `Setup` received (the attacker, the attack's
+   `HitData`, and the weapon's quality and world level) into the AoE's own ZDO from a postfix on
+   `Setup`. That runs in the frame the ZDO is created, before it can be sent, so no client ever
+   sees the AoE without it. Each client replays `Setup` from a postfix on `ZNetScene.CreateObject`,
+   after every `Awake` on the new object has run, so it does not matter that the Fader's prefabs put
+   `Aoe` ahead of `ZNetView`. Hit detection stays on the victim's own machine, against its own
+   position, as vanilla intends. The replayed copy adds only what the spawner's copy would have
+   done to that player: it never raises the attacker's skill, and when it took the attack's damage
+   it leaves props to the server's copy, since otherwise every client near a breath would hit the
+   same piece again where vanilla's other copies hit it with the prefab's zero damage. The server's
+   copy hits server-owned characters and props as before. AoEs spawned by players are untouched:
+   the server never runs their `Setup`, and a client replays only a setup on a ZDO the server owns.
+   The first setup of each prefab is logged on both ends, and so is a replay whose attacker the
+   client does not have.
+
 To find more after a game update, scan the decompiled source for `Player.m_localPlayer`
 dereferences inside `RPC_*` methods that have no null guard, then check how each RPC is invoked:
 ones sent to a specific peer are client-only and safe, while owner-targeted and `Everybody` ones
@@ -1365,6 +1400,7 @@ src/ServerAuthority/
   WaveSync.cs             The wave field diagnostic, keyed so two machines' logs can be compared
   WaterQueries.cs         Initialises the layer mask Floating's water lookups depend on
   KillCredit.cs           Sends a kill's defeat key and last hit to the players who earned them
+  TriggerAoeSetup.cs      Carries a creature's trigger AoE setup to every client's copy of it
   Integrity/              Mod manifest, character storage, validation, and both ends of the protocol
   Patches/                One file per subsystem, each explaining what vanilla does and why it changes
 tools/PatchCheck/              Resolves every patch target against the game assembly

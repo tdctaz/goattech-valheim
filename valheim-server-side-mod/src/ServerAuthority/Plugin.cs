@@ -24,9 +24,9 @@ namespace ServerAuthority
         internal static Harmony Harmony;
 
         /// <summary>
-        /// True once we are running inside a server that this mod should take over. Every patch
-        /// checks this and falls through to vanilla behaviour when it is false, so the assembly is
-        /// inert if it is ever loaded on a client.
+        /// True once we are running inside a server that this mod should take over. Server patches
+        /// check this and fall through to vanilla behaviour when it is false. The few that act on a
+        /// client, such as KillCredit, TriggerAoeSetup and Integrity, check for that instead.
         /// </summary>
         internal static bool ServerActive;
 
@@ -115,6 +115,7 @@ namespace ServerAuthority
 #if DEBUG_TOOLS
             Patches.Ship_CustomFixedUpdate_Diagnostic.Forget();
 #endif
+            TriggerAoeSetup.Reset();
             Plugin.EvaluateSession();
             KillCredit.Register();
 
