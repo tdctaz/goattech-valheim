@@ -117,6 +117,7 @@ namespace ServerAuthority
 #endif
             TriggerAoeSetup.Reset();
             CookingCollect.Reset();
+            SummonSkill.Reset();
             Plugin.EvaluateSession();
             KillCredit.Register();
             StatCredit.Register();

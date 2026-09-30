@@ -7,7 +7,8 @@ namespace ServerAuthority
         private enum Kind : byte
         {
             Stat,
-            ItemCraft
+            ItemCraft,
+            Skill
         }
 
         internal static void Register()
@@ -35,6 +36,15 @@ namespace ServerAuthority
             Send(peer, package);
         }
 
+        internal static void Skill(long peer, Skills.SkillType skill, float amount)
+        {
+            ZPackage package = new ZPackage();
+            package.Write((byte)Kind.Skill);
+            package.Write((int)skill);
+            package.Write(amount);
+            Send(peer, package);
+        }
+
         private static void Send(long peer, ZPackage package)
         {
             if (peer == 0L || ZRoutedRpc.instance == null)
@@ -48,13 +58,7 @@ namespace ServerAuthority
         private static void RPC_StatCredit(long sender, ZPackage package)
         {
             ZNet znet = ZNet.instance;
-            if (znet == null || znet.IsServer() || znet.GetServerPeer()?.m_uid != sender || Game.instance == null)
-            {
-                return;
-            }
-
-            PlayerProfile profile = Game.instance.GetPlayerProfile();
-            if (profile == null)
+            if (znet == null || znet.IsServer() || znet.GetServerPeer()?.m_uid != sender)
             {
                 return;
             }
@@ -67,7 +71,7 @@ namespace ServerAuthority
                     PlayerStatType stat = (PlayerStatType)package.ReadInt();
                     float amount = package.ReadSingle();
                     bool cheated = package.ReadBool();
-                    profile.IncrementStat(stat, amount, cheated);
+                    Profile()?.IncrementStat(stat, amount, cheated);
                     break;
                 }
                 case Kind.ItemCraft:
@@ -75,13 +79,38 @@ namespace ServerAuthority
                     string name = package.ReadString();
                     float amount = package.ReadSingle();
                     bool cheated = package.ReadBool();
-                    profile.IncrementStatItemCraft(name, amount, cheated);
+                    Profile()?.IncrementStatItemCraft(name, amount, cheated);
+                    break;
+                }
+                case Kind.Skill:
+                {
+                    Skills.SkillType skill = (Skills.SkillType)package.ReadInt();
+                    float amount = package.ReadSingle();
+                    Player player = Player.m_localPlayer;
+                    Skills skills = player != null ? player.GetSkills() : null;
+                    if (skills == null)
+                    {
+                        break;
+                    }
+
+                    if (skills.GetSkillDef(skill) == null)
+                    {
+                        Plugin.Log.LogWarning($"Skill gain for undefined skill {(int)skill} from the server ignored.");
+                        break;
+                    }
+
+                    skills.RaiseSkill(skill, amount);
                     break;
                 }
                 default:
                     Plugin.Log.LogWarning($"Stat credit of unknown kind {(byte)kind} from the server ignored.");
                     break;
             }
+        }
+
+        private static PlayerProfile Profile()
+        {
+            return Game.instance != null ? Game.instance.GetPlayerProfile() : null;
         }
     }
 }

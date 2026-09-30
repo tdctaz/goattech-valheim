@@ -1379,11 +1379,43 @@ A sixth credits the owner with work a player did:
    apply. Finding the collector as the player closest to the position the client sends was rejected,
    since two players at one station are told apart reliably only by who sent the request. What the
    collecting client does for itself stays with it. `StatCredit` carries a stat or an item craft to
-   one player's own profile, and is meant for the other stats the server now earns on players'
-   behalf. `Smelter`, which also runs the kiln, windmill, spinning wheel and refinery, and
+   one player's own profile, or a skill gain to their own skills, and is meant for the other stats
+   the server now earns on players' behalf. `Smelter`, which also runs the kiln, windmill, spinning wheel and refinery, and
    `Fermenter` spawn their output on the owner without touching a local player or profile, so they
    needed nothing. Every foundry collect is logged with its item and collector, and so is any
    collect whose collector cannot be found.
+
+A seventh trains the server's copy of a player instead of the player:
+
+7. **Skill gains a summon earns for its summoner.** A tamed creature calls `Character.RaiseSkill`
+   when its attack connects, once per melee swing or area attack however many it hits, when its
+   projectile or AoE hits, and when it blocks. A creature whose `Tameable` has
+   `m_levelUpOwnerSkill` passes the gain on to its follow target's `Skills`. Only summons have it: `Skeleton_Friendly` from the
+   Dead Raiser and `Wolf_spiritcaller`, `Boar_spiritcaller`, `Moose_spiritcaller` and
+   `Bjorn_spiritcaller` from the spirit caller staff, each raising Blood Magic at half rate
+   (`m_levelUpFactor` 0.5). Casting raises no skill, so for these two staffs the summons' hits are
+   the only way to train it. Vanilla spawns the summon on the caster's client, which owns it and
+   follows `Player.m_localPlayer`, so the gain lands in the real, saved skill. Here summons are
+   persistent and the server takes them over within seconds, and `Tameable` then finds the follow
+   target by name among the players the server has instantiated, which is the server's shell of
+   the summoner. The shell's skills start at zero and are never saved or sent anywhere, so the real
+   Blood Magic never moved. The shell levels quickly from zero, and `Skills.RaiseSkill` then calls
+   `Player.Message`, which forwards to the real client, so the player saw "Blood Magic: 1, 2, 3"
+   unrelated to their actual level, restarting whenever the shell was recreated. `OnSkillLevelup`
+   ran on the shell too.
+
+   `SummonSkill.cs` handles it from a prefix on `Character.RaiseSkill`. Only `Player` overrides that
+   method and a player is never tamed, so the one prefix covers every creature class. When the
+   follow target is a `Player` the server does not own, it sends the skill and the amount to the
+   peer that owns that character through `StatCredit.cs` and skips vanilla, so the shell never
+   levels, messages or plays an effect. The client calls `Skills.RaiseSkill` on its own player,
+   exactly the call vanilla's owner makes. It does not go through `Player.RaiseSkill`, whose status
+   effect multipliers vanilla never applies to a summon's gain either, and the world's skill gain
+   rate is applied by the client as it would be in vanilla. Every other case, a wild creature, a
+   tame without an owner skill or one following something other than a player, runs vanilla
+   unchanged. The first forward from each summon prefab is logged each session. So is the first gain
+   from each prefab that is dropped, which happens only while the summoner's character is being torn
+   down and has no owner to send to.
 
 To find more after a game update, scan the decompiled source for `Player.m_localPlayer`
 dereferences inside `RPC_*` methods that have no null guard, then check how each RPC is invoked:
@@ -1391,7 +1423,10 @@ ones sent to a specific peer are client-only and safe, while owner-targeted and 
 now execute on the server. Follow the ordinary methods those RPCs and other owner-run code call as
 well, since the Frost Foundry's dereference sat in `SpawnItem`, not in the RPC. And look for writes
 to `Game.instance.GetPlayerProfile()` or `Game.instance.IncrementPlayerStat` in owner-run code:
-they throw nothing and land in the server's own profile.
+they throw nothing and land in the server's own profile. The same goes for owner-run code that
+writes another character's state, as a tamed creature's `RaiseSkill` writes its summoner's
+`Skills`: if that character is a player, the server only has a shell of it, and the write lands in
+a copy that is never saved.
 
 ## Game updates
 
@@ -1441,7 +1476,8 @@ src/ServerAuthority/
   KillCredit.cs           Sends a kill's defeat key and last hit to the players who earned them
   TriggerAoeSetup.cs      Carries a creature's trigger AoE setup to every client's copy of it
   CookingCollect.cs       Collects from cooking stations on the server, crediting the collecting player
-  StatCredit.cs           Counts a stat or item craft in one player's own profile, sent by the server
+  StatCredit.cs           Counts a stat, item craft or skill gain for one player, sent by the server
+  SummonSkill.cs          Sends a summon's skill gain to its summoner's own client
   Integrity/              Mod manifest, character storage, validation, and both ends of the protocol
   Patches/                One file per subsystem, each explaining what vanilla does and why it changes
 tools/PatchCheck/              Resolves every patch target against the game assembly
