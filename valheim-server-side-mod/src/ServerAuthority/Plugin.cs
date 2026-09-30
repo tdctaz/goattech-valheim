@@ -116,7 +116,7 @@ namespace ServerAuthority
             Patches.Ship_CustomFixedUpdate_Diagnostic.Forget();
 #endif
             Plugin.EvaluateSession();
-            KillKeys.Register();
+            KillCredit.Register();
 
             if (__instance.IsServer())
             {

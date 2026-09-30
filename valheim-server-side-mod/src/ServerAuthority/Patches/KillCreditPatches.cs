@@ -3,7 +3,7 @@ using HarmonyLib;
 namespace ServerAuthority.Patches
 {
     [HarmonyPatch(typeof(Character), nameof(Character.OnDeath))]
-    internal static class Character_OnDeath_KillKeys_Patch
+    internal static class Character_OnDeath_KillCredit_Patch
     {
         private static void Prefix(Character __instance)
         {
@@ -12,7 +12,7 @@ namespace ServerAuthority.Patches
                 return;
             }
 
-            KillKeys.Deliver(__instance);
+            KillCredit.Deliver(__instance);
         }
     }
 }

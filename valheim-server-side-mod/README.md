@@ -1303,12 +1303,16 @@ A fourth is just as silent:
    ever the local one, so no player gained `KilledTroll`, `KilledBat`, `killed_surtling` or a boss
    key of their own. The world keys were unaffected. Player keys are what raids go by when the world has
    player based raids on, and with them missing the bat raid, which asks for `KilledBat` and
-   `defeated_bonemass` and nothing else, could never come. `KillKeys.cs` sends the key from a
-   prefix on `Character.OnDeath` to every connected player the creature's `Attackers` record
+   `defeated_bonemass` and nothing else, could never come. The same method counts the last hit
+   toward the owner's own statistics only when the attacker is `Player.m_localPlayer`, so no
+   player's last hits were counted either. `KillCredit.cs` sends both from a prefix on
+   `Character.OnDeath`. The key goes to every connected player the creature's `Attackers` record
    says hit it, which is the same list vanilla credits with the kill in its statistics, and the
    client adds it to its own character, or queues it until the character spawns. It is sent
    whether or not player based raids is on, as vanilla does, so turning the setting on later
-   finds the keys already earned.
+   finds the keys already earned. The last hit goes to the player whose character dealt it. The
+   boss dream that `OnDeath` also sets needs nothing: `CinematicsManager.SetDreamCinematic`
+   broadcasts to every peer, so each client with a local player keeps it.
 
 To find more after a game update, scan the decompiled source for `Player.m_localPlayer`
 dereferences inside `RPC_*` methods that have no null guard, then check how each RPC is invoked:
@@ -1360,7 +1364,7 @@ src/ServerAuthority/
   WeatherScope.cs         Lends EnvMan a position's weather around one consumer call
   WaveSync.cs             The wave field diagnostic, keyed so two machines' logs can be compared
   WaterQueries.cs         Initialises the layer mask Floating's water lookups depend on
-  KillKeys.cs             Hands a slain creature's defeat key to the players who fought it
+  KillCredit.cs           Sends a kill's defeat key and last hit to the players who earned them
   Integrity/              Mod manifest, character storage, validation, and both ends of the protocol
   Patches/                One file per subsystem, each explaining what vanilla does and why it changes
 tools/PatchCheck/              Resolves every patch target against the game assembly
