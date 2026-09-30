@@ -119,6 +119,7 @@ namespace ServerAuthority
             RpcTakeover.Reset();
             EarnedStats.Reset();
             Pheromones.Reset();
+            WardAccess.Reset();
             SummonSkill.Reset();
             Plugin.EvaluateSession();
             KillCredit.Register();

@@ -1619,6 +1619,46 @@ An eleventh edits the profile of whichever machine owns the object:
     is logged with its owner and point, and the owner's client logs what it did, printing both
     points in full when it keeps a spawn point that is not this bed's.
 
+A twelfth asks the local player a question on the server's behalf:
+
+12. **A ward check that throws on the server.** `PrivateArea.CheckAccess` asks every enabled ward
+    containing a point whether "the local player" may work there, through `HaveLocalAccess`, which
+    tests the ward's creator against the local profile and then dereferences
+    `Player.m_localPlayer`. Every caller but one is a hover text or an interaction on the player's
+    own client. The exception is `Attack.SpawnOnHitTerrain`, which checks before placing a terrain
+    op. It is reached from any weapon with `m_spawnOnHitTerrain`, where only the five pickaxes
+    spawn a terrain op, on their player's own client, and from `Aoe.OnHit` when an AoE with
+    `m_spawnOnHitTerrain` hits the ground. Three such AoEs run on the server, because the server
+    owns what spawns them: `BlobLava_explosion` and `writhan_explosion`, the lava blob's and the
+    Writhan's explosions from their attack and their death, both digging `digg_blobLavaExplosion`,
+    and `UnstableLavaRock_explosion` from the Ashlands prop breaking. None of them is set up with an
+    attacker. Inside an enabled ward the check threw out of the fixed-update loop, so that frame's
+    remaining AoE, effect area, bird and weapon-trail updates were skipped and the shared update
+    list was left uncleared. The explosion's own hits after the terrain collider were lost, since
+    `CheckHits` does not sort them, and the lava blob's and the Writhan's explosions, which hit at
+    the end of their lifetime, also skipped the `ZNetScene.Destroy` that follows, so the explosion
+    object was never removed.
+
+    The fourth AoE with a terrain op, `siegebomb_explosion`, does not reach this on the server.
+    Loading a catapult sends `RPC_RequestOwn`, its `Vagon` hands the catapult to the loader, the
+    policy's grace for a peer's claim leaves it there for 3 s or more, and the shot comes 1.4 s
+    after loading, so the loader's client spawns the projectile and its explosion and vanilla's
+    check runs there with the loader's own access. A catapult the server owns fires nothing
+    anyway, since only the loading client sets `m_loadStack`. If the server ever does fire one, a
+    siege bomb is a player's act and should be judged by the firer's access, the sender of
+    `RPC_Shoot` captured through `RpcTakeover`, not by the rule below.
+
+    `WardAccess.cs` answers it on the server from a prefix on `HaveLocalAccess`, which leaves
+    vanilla's check alone wherever there is a local player, so a player-hosted session keeps the
+    host's. In vanilla the question goes to whichever client owns the exploding thing, which is a
+    player near it, so a lava blob bursting in a base usually craters the ground of the players
+    who live there, and is stopped only when a stranger's client happens to own it. The server
+    reproduces that: a ward lets the terrain op through when a player whose active area holds the
+    ward is its creator or on its permitted list, and blocks it otherwise, which also covers
+    nobody being nearby, when vanilla would not be simulating the explosion at all. The creator
+    test against the server's own profile is dropped, since that profile belongs to nobody. The
+    first answer each way for each ward per session is logged.
+
 To find more after a game update, scan the decompiled source for `Player.m_localPlayer`
 dereferences inside `RPC_*` methods that have no null guard, then check how each RPC is invoked:
 ones sent to a specific peer are client-only and safe, while owner-targeted and `Everybody` ones
@@ -1684,6 +1724,7 @@ src/ServerAuthority/
   StatCredit.cs           Counts a stat, item craft or skill gain for one player, sent by the server
   PlayerLaunch.cs         Sends a launch aimed at the server's copy of a player to their client
   BedSpawnPoint.cs        Tells a destroyed bed's owner to drop it as their spawn point
+  WardAccess.cs           Answers a ward's access check on the server from the players near it
   PlayerEffects.cs        Publishes each player's active pheromone effects on their own ZDO
   Pheromones.cs           Lets the anti-sting and troll love meads work on server-owned creatures
   SummonSkill.cs          Sends a summon's skill gain to its summoner's own client
