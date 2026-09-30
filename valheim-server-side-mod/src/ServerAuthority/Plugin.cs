@@ -122,6 +122,7 @@ namespace ServerAuthority
             WardAccess.Reset();
             CatapultLoad.Reset();
             CreatureSenses.Reset();
+            PetFaces.Reset();
             Patches.ArcheryTarget_OnProjectileHit_Patch.Reset();
             SummonSkill.Reset();
             Plugin.EvaluateSession();

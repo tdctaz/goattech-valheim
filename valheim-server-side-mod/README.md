@@ -1777,6 +1777,39 @@ A fifteenth asks the local player about states only the player's own client know
     the prefix skips the original, and tested `InDebugFlyMode`, so it now uses `IsDebugFlying` to
     agree. The first time the server honours each state per session is logged.
 
+A sixteenth covers two small things only the owner's own player ever saw:
+
+16. **The summon limit message and the pet rock's faces.** `Tameable.UnsummonMaxInstances` runs
+    on a summon's owner whenever it is told to follow a player and has a summon limit,
+    `s_maxInstances`: of the summons the staffs cap, only the Dead Raiser's skeletons and the
+    spirit caller's animals have a `Tameable` to be told anything. It unsummons the oldest of that
+    player's summons over the limit and tells `Player.m_localPlayer` "max summons reached". A new
+    summon's first command runs on the
+    caster's client, which still works. The server reaches it when it takes a summon over and
+    `Tameable.UpdateSavedFollowTarget` re-commands it to follow its player, and the message was
+    dropped; the summons are already trimmed by then, so it only shows when the server counts more
+    of them than the caster's client could see, which makes it rare rather than impossible. None
+    of the capped summons is commandable by hand. A prefix on `UnsummonMaxInstances` repeats
+    vanilla's count on the server and sends the message to the summoner, the follow target, whose
+    `Player.Message` forwards to their client. It costs one pass over the characters per follow
+    command, and is logged when it fires.
+
+    `Pet` is on `Placeable_HardRock`, the pet rock. Every 7 s its owner, while the rock is not on
+    screen for it, picks a face from nearby players' status effects (soft death, rested, camp
+    fire, burning, freezing, poison, encumbered, smoked), the rock's love points and the static
+    `Player.LastEmote`, and otherwise now and then at random, then writes it to the ZDO and
+    broadcasts it; the face is purely visual. The owner's own player is the only one whose
+    effects and emote it can see, so in vanilla the rock reacts to whoever owns it. On the server
+    it saw no effects and no emotes, and only its random faces and love points reached anyone.
+    Publishing the eight effects on every player's ZDO for this was rejected in item 10, since a
+    key rides on every send once written. Instead the server no longer picks faces, and each
+    client runs a copy of vanilla's choice for a server-owned rock itself, from its own player's
+    effects and emotes, and applies the face locally without writing the ZDO. That is vanilla's
+    own rule, the owner's player and not while the rock is on screen, on every client, so each
+    player sees the rock react to them. Players may see different faces at once, where vanilla
+    showed everyone the owner's. The first local face change per session is logged on the client.
+    Both copies need a re-read after a game update.
+
 To find more after a game update, scan the decompiled source for `Player.m_localPlayer`
 dereferences inside `RPC_*` methods that have no null guard, then check how each RPC is invoked:
 ones sent to a specific peer are client-only and safe, while owner-targeted and `Everybody` ones
@@ -1847,6 +1880,7 @@ src/ServerAuthority/
   PlayerEffects.cs        Publishes each player's active pheromone effects on their own ZDO
   PlayerFlags.cs          Publishes ghost mode and cinematic playback on each player's own ZDO
   CreatureSenses.cs       Hides ghost-mode, flying and cinematic-watching players from server AI
+  PetFaces.cs             Picks a server-owned pet rock's face on each client from its own player
   Pheromones.cs           Lets the anti-sting and troll love meads work on server-owned creatures
   SummonSkill.cs          Sends a summon's skill gain to its summoner's own client
   EarnedStats.cs          Sends chopping, mining, hit and taming stats to the player who earned them
