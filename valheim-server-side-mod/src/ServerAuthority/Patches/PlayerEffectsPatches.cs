@@ -13,6 +13,7 @@ namespace ServerAuthority.Patches
             }
 
             PlayerEffects.Publish(__instance, zdo);
+            PlayerFlags.Publish((Player)__instance.m_character, zdo);
         }
     }
 }

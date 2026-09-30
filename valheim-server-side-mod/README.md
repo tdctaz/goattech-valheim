@@ -1738,6 +1738,45 @@ A fourteenth shows a score to a player who is not there:
     method is copied, so re-read it after a game update. The first server-side hit per session is
     logged.
 
+A fifteenth asks the local player about states only the player's own client knows:
+
+15. **Creatures that see an admin in ghost mode, a flying admin, or a player in a cinematic.**
+    Creature AI runs on the creature's owner and asks each player it considers whether they are
+    hidden. `BaseAI.CanHearTarget`, `CanSeeTarget` and the hunting fallback in `FindEnemy` skip a
+    player for which `InDebugFlyMode()` or `InGhostMode()` is true, and `MonsterAI.UpdateSleep`
+    skips one for which `InGhostMode()` or `IsDebugFlying()` is. `FindEnemy` also skips
+    `Player.m_localPlayer` while `CinematicsManager.IsPlaying()`. `IsDebugFlying` reads the
+    player's own `s_debugFly` ZDO flag for anyone else, but `InDebugFlyMode` and `InGhostMode` read
+    only local fields, and the cinematic test only ever matches the owner's own player. So the
+    server's creatures saw, heard and hunted an admin flying or in ghost mode, and woke for one in
+    ghost mode (waking already used `IsDebugFlying`, so flying never woke them). They also closed
+    in on a player watching a cinematic. In this game version those are the boss dream videos
+    played on the next sleep after a kill or a rune stone, the outro and end credits, and the
+    admin `cinematic` command; the new-world intro is the text viewer, not a cinematic, since
+    every `CinematicsManager` has `m_introOnNewWorld` off and plays its video only at the main
+    menu. Damage stays blocked on the player's own client during a cinematic, so they only found
+    the creatures on top of them when it ended.
+
+    `PlayerFlags.cs` has each client publish ghost mode and "a cinematic is playing" as two bits of
+    one int on its own player's ZDO, from the same `SEMan.Update` postfix that publishes the
+    pheromone effects, written only when the value changes, so the key never appears for a player
+    who has not used either, and the client logs each change. `CreatureSenses.cs` reads them on the
+    server. A postfix on `Player.InGhostMode` reports the published bit for players the server
+    does not own, which covers every caller at once; `InGhostMode` is virtual and so cannot be
+    inlined into its callers. `InDebugFlyMode` is a plain field getter the JIT may inline, so
+    instead of patching it, prefixes on the static `CanHearTarget` and `CanSeeTarget` hide a player
+    for whom `IsDebugFlying` holds. `FindEnemy` is replaced on the server by a copy that skips a
+    player in a published cinematic and uses `IsDebugFlying` in its hunting fallback, so re-read it
+    after a game update. Players a machine owns, and every client, are untouched.
+
+    Every other `InGhostMode` caller on the server now sees the bit too, as vanilla's owner does
+    for its own player. `Character.ApplyDamage` marks a creature a ghost-mode admin damages as
+    cheated, and `EggHatch` does not hatch while a ghost-mode admin is the closest player, which
+    keeps crypt chests, ghost skulls, greydwarf surprises, seeker eggs and bone piles shut around
+    them. The Creatures mod's hearing postfix on the same `CanHearTarget` overload runs even when
+    the prefix skips the original, and tested `InDebugFlyMode`, so it now uses `IsDebugFlying` to
+    agree. The first time the server honours each state per session is logged.
+
 To find more after a game update, scan the decompiled source for `Player.m_localPlayer`
 dereferences inside `RPC_*` methods that have no null guard, then check how each RPC is invoked:
 ones sent to a specific peer are client-only and safe, while owner-targeted and `Everybody` ones
@@ -1806,6 +1845,8 @@ src/ServerAuthority/
   BedSpawnPoint.cs        Tells a destroyed bed's owner to drop it as their spawn point
   WardAccess.cs           Answers a ward's access check on the server from the players near it
   PlayerEffects.cs        Publishes each player's active pheromone effects on their own ZDO
+  PlayerFlags.cs          Publishes ghost mode and cinematic playback on each player's own ZDO
+  CreatureSenses.cs       Hides ghost-mode, flying and cinematic-watching players from server AI
   Pheromones.cs           Lets the anti-sting and troll love meads work on server-owned creatures
   SummonSkill.cs          Sends a summon's skill gain to its summoner's own client
   EarnedStats.cs          Sends chopping, mining, hit and taming stats to the player who earned them

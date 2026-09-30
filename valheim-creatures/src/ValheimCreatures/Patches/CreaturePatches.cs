@@ -132,7 +132,7 @@ namespace ValheimCreatures.Patches
             }
 
             if (distance < target.GetNoiseRange() * traits.HearingMultiplier &&
-                (!(target is Player player) || (!player.InDebugFlyMode() && !player.InGhostMode())))
+                (!(target is Player player) || (!player.IsDebugFlying() && !player.InGhostMode())))
             {
                 __result = true;
             }
