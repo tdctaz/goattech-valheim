@@ -15,6 +15,8 @@ namespace ValheimCreatures
             internal Vector3 Position;
             internal int Waves;
             internal bool Sized;
+            internal bool WaveUp;
+            internal bool HeldLogged;
             internal int Spawned;
             internal int Comfort;
             internal int Players;
@@ -111,17 +113,34 @@ namespace ValheimCreatures
             Send();
         }
 
-        private static void Size(Raid raid, Balance balance)
+        private static void Size(Raid raid, Balance balance, int players)
         {
-            raid.Sized = true;
-            raid.Players = ZNet.instance.GetNrOfPlayers();
-            raid.Comfort = BaseComfort(raid.Position);
+            if (raid.Sized && players <= raid.Players)
+            {
+                return;
+            }
+
+            bool first = !raid.Sized;
+            if (first)
+            {
+                raid.Sized = true;
+                raid.Comfort = BaseComfort(raid.Position);
+            }
+
+            raid.Players = players;
             int waves = Mathf.Min(Mathf.Max(0, raid.Players - 1), balance.RaidPlayerWavesMax) +
                         (balance.RaidComfortPerWave > 0 ? raid.Comfort / balance.RaidComfortPerWave : 0);
-            raid.Waves = Mathf.Clamp(waves, 1, Mathf.Max(1, balance.RaidMaxWaves));
+            waves = Mathf.Clamp(waves, 1, Mathf.Max(1, balance.RaidMaxWaves));
+            if (!first && waves <= raid.Waves)
+            {
+                return;
+            }
+
+            raid.Waves = Mathf.Max(raid.Waves, waves);
             Plugin.Log.LogInfo(
-                $"Raid {raid.Template.m_name} at ({raid.Position.x:0}, {raid.Position.z:0}) has {raid.Waves} waves for " +
-                $"{raid.Players} players online and base comfort {raid.Comfort}.");
+                $"Raid {raid.Template.m_name} at ({raid.Position.x:0}, {raid.Position.z:0}) " +
+                $"{(first ? "has" : "grows to")} {raid.Waves} waves for {raid.Players} players in the area and base " +
+                $"comfort {raid.Comfort}.");
         }
 
         private static int BaseComfort(Vector3 position)
@@ -168,6 +187,7 @@ namespace ValheimCreatures
             float dt = Time.deltaTime;
             Balance balance = ConfigSync.Current;
             Ended.Clear();
+            Raid waveUp = RaidWithWaveUp();
             foreach (Raid raid in Active)
             {
                 raid.Age += dt;
@@ -184,17 +204,45 @@ namespace ValheimCreatures
                 List<Vector3> players = PlayersInArea(raid);
                 if (players.Count > 0)
                 {
-                    if (!raid.Sized)
-                    {
-                        Size(raid, balance);
-                    }
+                    Size(raid, balance, players.Count);
 
                     raid.InArea += dt;
                     raid.Template.m_time = raid.InArea;
-                    if (raid.Spawned < raid.Waves && raid.InArea >= raid.NextWave)
+                }
+
+                if (raid.WaveUp && Alive(raid) == 0)
+                {
+                    raid.WaveUp = false;
+                    raid.NextWave = raid.InArea + Mathf.Max(10f, balance.RaidWaveInterval);
+                    if (waveUp == raid)
+                    {
+                        waveUp = null;
+                    }
+
+                    if (raid.Spawned < raid.Waves)
+                    {
+                        Plugin.Log.LogInfo(
+                            $"Raid {raid.Template.m_name} wave {raid.Spawned} of {raid.Waves} is dead; the next comes " +
+                            $"after {Mathf.Max(10f, balance.RaidWaveInterval):0} seconds with a player in the area.");
+                    }
+                }
+
+                if (players.Count > 0 && raid.Spawned < raid.Waves && raid.InArea >= raid.NextWave)
+                {
+                    if (waveUp == null)
                     {
                         SpawnWave(raid, players, balance);
-                        raid.NextWave = raid.InArea + Mathf.Max(10f, balance.RaidWaveInterval);
+                        raid.WaveUp = true;
+                        raid.HeldLogged = false;
+                        waveUp = raid;
+                    }
+                    else if (!raid.HeldLogged)
+                    {
+                        raid.HeldLogged = true;
+                        Plugin.Log.LogInfo(
+                            $"Raid {raid.Template.m_name} wave {raid.Spawned + 1} of {raid.Waves} is held back: " +
+                            $"wave {waveUp.Spawned} of {waveUp.Template.m_name} at ({waveUp.Position.x:0}, " +
+                            $"{waveUp.Position.z:0}) still has {Alive(waveUp)} creatures alive.");
                     }
                 }
 
@@ -234,6 +282,19 @@ namespace ValheimCreatures
             Plugin.Log.LogInfo(
                 $"Raid {raid.Template.m_name} wave {raid.Spawned} of {raid.Waves}: " +
                 $"{(names.Count > 0 ? string.Join(", ", names) : "nothing, no open ground found")}.");
+        }
+
+        private static Raid RaidWithWaveUp()
+        {
+            foreach (Raid raid in Active)
+            {
+                if (raid.WaveUp && Alive(raid) > 0)
+                {
+                    return raid;
+                }
+            }
+
+            return null;
         }
 
         private static List<Vector3> PlayersInArea(Raid raid)

@@ -199,18 +199,21 @@ namespace ValheimCreatures
 
             RaidWaves = config.Bind("Raids", "Waves", true,
                 "Dedicated server only. Run raids as waves: a raid keeps going until all its waves are dead, never " +
-                "runs away on a timer, and several bases can be raided at once, one raid per base. Off is vanilla.");
+                "runs away on a timer, and several bases can be raided at once, one raid per base. Only one wave is " +
+                "alive at a time across the whole world. Off is vanilla.");
             RaidWaveInterval = config.Bind("Raids", "WaveInterval", 180f,
                 new ConfigDescription(
-                    "Seconds between two waves. The clock only runs while a player is inside the raid's area.",
+                    "Seconds from the moment a wave is dead until the raid's next wave. The clock only runs while a " +
+                    "player is inside the raid's area. A wave also waits while any other raid has a wave alive.",
                     new AcceptableValueRange<float>(10f, 1800f)));
             RaidMaxWaves = config.Bind("Raids", "MaxWaves", 8,
                 new ConfigDescription(
-                    "The most waves a raid can have. A raid has one wave per player online beyond the first, up to " +
-                    "PlayerWavesMax, plus one per ComfortPerWave comfort at the base, and at least one.",
+                    "The most waves a raid can have. A raid has one wave per player in its area beyond the first, up to " +
+                    "PlayerWavesMax, plus one per ComfortPerWave comfort at the base, and at least one. The raid " +
+                    "grows if more players join it in its area.",
                     new AcceptableValueRange<int>(1, 20)));
             RaidPlayerWavesMax = config.Bind("Raids", "PlayerWavesMax", 5,
-                new ConfigDescription("The most waves that players online beyond the first can add.",
+                new ConfigDescription("The most waves that players in the raid's area beyond the first can add.",
                     new AcceptableValueRange<int>(0, 20)));
             RaidComfortPerWave = config.Bind("Raids", "ComfortPerWave", 5,
                 new ConfigDescription(

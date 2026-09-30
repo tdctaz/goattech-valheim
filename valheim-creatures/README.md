@@ -120,19 +120,21 @@ are local to each player, since they change nothing but appearance.
 
 On a dedicated server, raids come in waves instead of running for a fixed time:
 
-- A raid has one wave for every player online beyond the first, up to five, plus one for every 5
+- A raid has one wave for every player in its area beyond the first, up to five, plus one for every 5
   comfort at the base, and between 1 and 8 waves in all. A lone player in a fresh base faces one
   wave, and two at comfort 10; a full group in a well furnished base faces eight.
 - A wave is the raid's own spawn: one group of every creature in it, with the raid's group sizes,
   the same as a summoning boss's wave. They appear about 40m from a player inside the raid's area
   and hunt the players.
-- Waves come every 3 minutes. The clock only runs while a player is inside the area, so leaving
-  pauses the attack rather than ending it.
+- Only one wave is alive at a time. The next wave comes 3 minutes after the last creature of the
+  previous one dies. The clock only runs while a player is inside the area, so leaving pauses the
+  attack rather than ending it.
 - The raid is over when all its waves have come and every creature from them is dead. Nothing runs
   away on a timer. After 2 hours it ends anyway, in case something is stuck, and whatever is left
   stops hunting and stays as ordinary monsters.
 - Several bases can be under attack at once, but one base only one raid at a time: a raid picked
-  for a base that is already under attack is skipped.
+  for a base that is already under attack is skipped. The one wave rule holds across the whole
+  world: while one raid has a wave alive, every other raid's next wave waits for it to die.
 
 When and where raids happen is still vanilla's choice: its timer, its odds, its base check and its
 list of raids for your progress. The mod takes over each raid once vanilla has picked it, which is
@@ -141,7 +143,8 @@ also why vanilla never sees one running and keeps picking raids for other bases.
 The comfort is worked out on the server, since the game only keeps it on each player's machine: the
 best comfort anywhere within 30m of where the raid starts, counted as if sheltered. The server only
 has a base's pieces loaded while a player is near, so a raid sizes itself when the first player
-enters its area, and that is also when it counts the players online. The music, sky
+enters its area. It counts the players inside the area, and grows while it runs if more players
+are in the area at once than before; it never shrinks when players leave. The music, sky
 and start and end messages are vanilla's; every client is told which raids are running and plays
 the one it is standing in.
 
@@ -276,9 +279,9 @@ connected to a server; a client's own copy applies in single player and when hos
 | `BossCyan.Distance` | `30` | Meters from the boss. |
 | `BossBlue.ArrowReduction` | `0.25` | |
 | `Raids.Waves` | `true` | Dedicated server only. `false` is vanilla raids. |
-| `Raids.WaveInterval` | `180` | Seconds between waves, counted while a player is in the area. |
+| `Raids.WaveInterval` | `180` | Seconds from a wave's death to the next wave, counted while a player is in the area. |
 | `Raids.MaxWaves` | `8` | |
-| `Raids.PlayerWavesMax` | `5` | Most waves from players online beyond the first. |
+| `Raids.PlayerWavesMax` | `5` | Most waves from players in the area beyond the first. |
 | `Raids.ComfortPerWave` | `5` | Comfort per extra wave; 0 turns it off. |
 | `Raids.TimeoutMinutes` | `120` | |
 | `Raids.SpawnDistance` | `40` | Meters from a player in the area. |
