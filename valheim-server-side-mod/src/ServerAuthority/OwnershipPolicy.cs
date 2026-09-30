@@ -67,6 +67,7 @@ namespace ServerAuthority
             Gather(zdoMan, anchors, nearOnly, playerCharacters);
             Measure(anchors);
             HookedFish.Refresh();
+            CatapultLoad.Refresh();
 
             int transfers = 0;
             int simulated = 0;

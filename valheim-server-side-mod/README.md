@@ -42,15 +42,17 @@ Some things still belong to clients, and always will:
 - **Player characters.** Never reassigned, at all. A body simulated by the server rubber-bands.
 - **Mounts and carts.** Continuous input, so a server-owned animal answers a full round trip late.
   The user holds a lease on it; once they let go it reverts to the server.
-- **A fish on the line.** Its escapes and its fight run on whoever owns it, so the fisher holds a
-  lease on it while one of their floats names it as the catch, and it reverts to the server once
-  it is caught, lost or the line breaks.
 
   **Ships are no longer in this list.** The server owns a boat even while somebody is steering it,
   because that is the only way every passenger gets the same hull physics rather than whatever the
   driver's connection happens to feel like. The rudder does answer a round trip late, and that was
   judged worth it. `Vehicles.KeepShipOwnedByDriver` hands a crewed boat back to its driver and
   exists as a fallback for when server simulation of a ship misbehaves, not as a tuning knob.
+- **A fish on the line.** Its escapes and its fight run on whoever owns it, so the fisher holds a
+  lease on it while one of their floats names it as the catch, and it reverts to the server once
+  it is caught, lost or the line breaks.
+- **A loaded catapult.** Only the machine that loaded it knows how much it fires, so the loader
+  holds a short lease on it from loading, long enough for the shot.
 - **Anything a player is actively using.** The policy never takes a ZDO whose `InUse` flag is set
   while its owner is still connected. Valheim already uses that flag as its own "somebody is
   interacting with this" convention, so this covers chests, ship cargo and cart inventories at once.
@@ -1131,6 +1133,33 @@ have the local state vanilla quietly assumes an owner has. Seven kinds, nearly a
      the float going away or the fisher disconnecting, so within about 2 s, and lapses on its own
      after 6 s without renewal. Taking and releasing a fish are logged, with the fisher's name
      captured while they are still connected, and only when the fisher holding it changes.
+   - A loaded catapult. `Catapult.OnLoadPointUse` takes the ammo out of the loader's inventory and
+     sets `m_loadStack`, the number of shots, only on the loader's machine, and the release about
+     1.4 s later fires only on the owner, `m_loadStack` times. A loader who does not own the
+     catapult asks for it with `RPC_RequestOwn`, which the catapult's `Vagon` grants unless someone
+     is pulling it; a loader who already owns it asks nothing. So the shot works only if the loader
+     owns the catapult at release. The policy broke that for a loader who already owned it from an
+     earlier claim, lowering the legs or letting go of the cart: the grace for a peer's claim runs
+     from when the policy first sees it, and a load does not restart it, so a load up to 1.4 s
+     before the reclaim lost its ammo and fired nothing, since the server's copy has no
+     `m_loadStack`. `CatapultLoad.cs` takes over the catapult's `RPC_SetLoadedVisual` handler
+     through `RpcTakeover`. The loader broadcasts it at the moment of loading, so its sender is the
+     loader. The server then leases the catapult to the loader for 6 s, well past the release, and
+     hands it over at once if anyone else holds it, the server, nobody, or another player the
+     loader has not yet heard from, so neither the next policy pass nor a reclaim in flight can
+     miss the shot. The first loader keeps it: a second player's load while that lease stands is
+     left to vanilla, as a second ownership request would be. A catapult someone is pulling is left
+     alone, as vanilla denies the request too. On every ownership pass, before the candidates, the
+     lease is checked and ended when it has lapsed, when the loader has disconnected, or when
+     another connected player has taken the catapult through vanilla, for example by grabbing the
+     pull bar, so the policy never pulls it back from them before their attach flag arrives. A
+     takeover counts only if the ZDO's owner revision has risen since the load, because a late
+     update from the catapult's previous owner can briefly write their name back without one. None
+     of this runs when the ownership mode is `Vanilla`. Loads and the end of each lease are logged
+     with the reason. If the loader's connection takes longer than
+     the 1.4 s to receive ownership, the shot is still lost, as it would be in vanilla, where the
+     request goes to whichever client owns the catapult; firing from the server instead would
+     risk a second shot.
 3. **Nothing. The boat failure was this mod's own bug**, and it is worth recording because the
    first two explanations written here were both wrong. A server-owned hull sank, tumbled and
    exploded, which was blamed first on the server having no water volumes and then on an
@@ -1405,25 +1434,25 @@ A sixth credits the owner with work a player did:
    since two players at one station are told apart reliably only by who sent the request. What the
    collecting client does for itself stays with it. `StatCredit` carries a stat or an item craft to
    one player's own profile, or a skill gain to their own skills, and is meant for the other stats
-   the server now earns on players' behalf. `Smelter`, which also runs the kiln, windmill, spinning wheel and refinery, and
-   `Fermenter` spawn their output on the owner without touching a local player or profile, so they
-   needed nothing. Every foundry collect is logged with its item and collector, and so is any
-   collect whose collector cannot be found.
+   the server now earns on players' behalf. `Smelter`, which also runs the kiln, windmill,
+   spinning wheel and refinery, and `Fermenter` spawn their output on the owner without touching a
+   local player or profile, so they needed nothing. Every foundry collect is logged with its item
+   and collector, and so is any collect whose collector cannot be found.
 
 A seventh trains the server's copy of a player instead of the player:
 
 7. **Skill gains a summon earns for its summoner.** A tamed creature calls `Character.RaiseSkill`
    when its attack connects, once per melee swing or area attack however many it hits, when its
-   projectile or AoE hits, and when it blocks. A creature whose `Tameable` has
-   `m_levelUpOwnerSkill` passes the gain on to its follow target's `Skills`. Only summons have it: `Skeleton_Friendly` from the
-   Dead Raiser and `Wolf_spiritcaller`, `Boar_spiritcaller`, `Moose_spiritcaller` and
+   projectile or AoE hits, and when it blocks. A creature whose `Tameable` has `m_levelUpOwnerSkill`
+   passes the gain on to its follow target's `Skills`. Only summons have it: `Skeleton_Friendly`
+   from the Dead Raiser and `Wolf_spiritcaller`, `Boar_spiritcaller`, `Moose_spiritcaller` and
    `Bjorn_spiritcaller` from the spirit caller staff, each raising Blood Magic at half rate
    (`m_levelUpFactor` 0.5). Casting raises no skill, so for these two staffs the summons' hits are
    the only way to train it. Vanilla spawns the summon on the caster's client, which owns it and
    follows `Player.m_localPlayer`, so the gain lands in the real, saved skill. Here summons are
    persistent and the server takes them over within seconds, and `Tameable` then finds the follow
-   target by name among the players the server has instantiated, which is the server's shell of
-   the summoner. The shell's skills start at zero and are never saved or sent anywhere, so the real
+   target by name among the players the server has instantiated, which is the server's shell of the
+   summoner. The shell's skills start at zero and are never saved or sent anywhere, so the real
    Blood Magic never moved. The shell levels quickly from zero, and `Skills.RaiseSkill` then calls
    `Player.Message`, which forwards to the real client, so the player saw "Blood Magic: 1, 2, 3"
    unrelated to their actual level, restarting whenever the shell was recreated. `OnSkillLevelup`
@@ -1681,10 +1710,10 @@ A thirteenth waits for a local player before doing something for everyone:
     Ashlands-ready, and `Trailership` has neither, but nothing in the game builds or places a
     `Trailership`: it appears only in `ZNetScene`'s prefab list, so only the `spawn` console command
     produces one. The server requires the Ashlands water for every ship, since a key set in the
-    Meadows would bring Hugin's Ashlands warning long before it means anything. Vanilla's 10 s timer only repeats a key that is already set, and a key
-    the server sets takes effect at once, so testing for the key keeps the same world state with
-    a single message. The server logs the ship, its position and the nearby player when it sets
-    the key.
+    Meadows would bring Hugin's Ashlands warning long before it means anything. Vanilla's 10 s
+    timer only repeats a key that is already set, and a key the server sets takes effect at once,
+    so testing for the key keeps the same world state with a single message. The server logs the
+    ship, its position and the nearby player when it sets the key.
 
 A fourteenth shows a score to a player who is not there:
 
@@ -1753,8 +1782,9 @@ src/ServerAuthority/
   Plugin.cs               Entry point, session detection, game version check
   ModConfig.cs            Configuration
   OwnershipPolicy.cs      Applies the rules to live ZDOs
-  OwnershipLeases.cs      Short-lived pins that keep an object with one client (mounts, carts, fish)
+  OwnershipLeases.cs      Leases keeping an object with one client: mounts, carts, fish, catapults
   HookedFish.cs           Leases a hooked fish to its fisher for as long as it is on the line
+  CatapultLoad.cs         Leases a loaded catapult to its loader long enough for the shot
   SimulationAnchors.cs    Connected players, which replace the server's unused reference position
   ServerViewpoint.cs      Where a headless server stands when the game asks a question about "here"
   WaveField.cs            Deterministic wind and the water clock, so every machine computes one sea

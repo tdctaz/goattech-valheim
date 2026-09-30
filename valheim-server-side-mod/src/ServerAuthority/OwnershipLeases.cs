@@ -4,8 +4,10 @@ namespace ServerAuthority
 {
     /// <summary>
     /// Short lived pins that keep a specific object owned by a specific client despite the sector
-    /// policy. The one case that needs this today is a crewed ship: steering an object the server
-    /// owns costs a full round trip per rudder input, so the driver keeps it.
+    /// policy: a mount while ridden and a cart while pulled, because continuous input on an object
+    /// the server owns answers a full round trip late; a hooked fish, whose fight runs on its
+    /// owner; a loaded catapult, whose shot only the loader's machine knows; and a crewed ship when
+    /// KeepShipOwnedByDriver is on.
     ///
     /// Leases expire on their own so that a client which unloads or stops driving cannot strand an
     /// object in client ownership forever, and are dropped at once when their owner disconnects.
