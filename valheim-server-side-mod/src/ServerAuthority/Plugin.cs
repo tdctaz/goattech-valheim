@@ -120,6 +120,7 @@ namespace ServerAuthority
             EarnedStats.Reset();
             Pheromones.Reset();
             WardAccess.Reset();
+            Patches.ArcheryTarget_OnProjectileHit_Patch.Reset();
             SummonSkill.Reset();
             Plugin.EvaluateSession();
             KillCredit.Register();

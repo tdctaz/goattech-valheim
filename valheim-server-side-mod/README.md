@@ -1686,6 +1686,29 @@ A thirteenth waits for a local player before doing something for everyone:
     a single message. The server logs the ship, its position and the nearby player when it sets
     the key.
 
+A fourteenth shows a score to a player who is not there:
+
+14. **Archery targets that server-owned shots pass through.** `Projectile.OnHit` runs on the
+    projectile's owner and calls `IHitProjectile.OnProjectileHit` on the collider it hit, an
+    ordinary interface call rather than an RPC. `ArcheryTarget.OnProjectileHit`, on the
+    `piece_ArcheryTarget` piece, sets how long the projectile stays stuck, works out the score and
+    shows it with `Player.m_localPlayer.Message`, unguarded. After that line it records the score
+    and ammo type on the target's ZDO, plays the bullseye and hit effects, raises the shooter's
+    skill and tells `OnHit` to go on and stick the projectile. A player's own arrows belong to that
+    player's client and are unaffected. Projectiles the server owns threw at the message and lost
+    all of the rest, flying on through the target and throwing again on the next frames: turret
+    bolts, since a turret fires on its owner, creature arrows, spears and other ranged shots, and
+    the `radiation` bolts the `Radiator` on a working eitr refinery or a dropped Eitr gives off.
+    Nothing else in `ArcheryTarget` needs a local player on the server; its other uses are hover
+    text and interaction on the player's client.
+
+    A prefix on `OnProjectileHit` runs the method on the server as vanilla wrote it, minus the
+    message, whenever there is no local player. There is no score message to show: the shooter
+    of a server-owned projectile is never a player. A tame's hit on a target still raises the
+    shooter's skill, which for a summoned archer is forwarded to its summoner as in item 7. The
+    method is copied, so re-read it after a game update. The first server-side hit per session is
+    logged.
+
 To find more after a game update, scan the decompiled source for `Player.m_localPlayer`
 dereferences inside `RPC_*` methods that have no null guard, then check how each RPC is invoked:
 ones sent to a specific peer are client-only and safe, while owner-targeted and `Everybody` ones
