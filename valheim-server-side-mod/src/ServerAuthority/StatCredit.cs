@@ -8,7 +8,8 @@ namespace ServerAuthority
         {
             Stat,
             ItemCraft,
-            Skill
+            Skill,
+            ToolStat
         }
 
         internal static void Register()
@@ -16,43 +17,53 @@ namespace ServerAuthority
             ZRoutedRpc.instance?.Register<ZPackage>(Rpc, RPC_StatCredit);
         }
 
-        internal static void Stat(long peer, PlayerStatType stat, float amount = 1f, bool cheated = false)
+        internal static bool Stat(long peer, PlayerStatType stat, float amount = 1f, bool cheated = false)
         {
             ZPackage package = new ZPackage();
             package.Write((byte)Kind.Stat);
             package.Write((int)stat);
             package.Write(amount);
             package.Write(cheated);
-            Send(peer, package);
+            return Send(peer, package);
         }
 
-        internal static void ItemCraft(long peer, string name, float amount = 1f, bool cheated = false)
+        internal static bool ToolStat(long peer, PlayerStatType stat, float amount = 1f)
+        {
+            ZPackage package = new ZPackage();
+            package.Write((byte)Kind.ToolStat);
+            package.Write((int)stat);
+            package.Write(amount);
+            return Send(peer, package);
+        }
+
+        internal static bool ItemCraft(long peer, string name, float amount = 1f, bool cheated = false)
         {
             ZPackage package = new ZPackage();
             package.Write((byte)Kind.ItemCraft);
             package.Write(name);
             package.Write(amount);
             package.Write(cheated);
-            Send(peer, package);
+            return Send(peer, package);
         }
 
-        internal static void Skill(long peer, Skills.SkillType skill, float amount)
+        internal static bool Skill(long peer, Skills.SkillType skill, float amount)
         {
             ZPackage package = new ZPackage();
             package.Write((byte)Kind.Skill);
             package.Write((int)skill);
             package.Write(amount);
-            Send(peer, package);
+            return Send(peer, package);
         }
 
-        private static void Send(long peer, ZPackage package)
+        private static bool Send(long peer, ZPackage package)
         {
-            if (peer == 0L || ZRoutedRpc.instance == null)
+            if (peer == 0L || ZRoutedRpc.instance == null || ZNet.instance == null || ZNet.instance.GetPeer(peer) == null)
             {
-                return;
+                return false;
             }
 
             ZRoutedRpc.instance.InvokeRoutedRPC(peer, Rpc, package);
+            return true;
         }
 
         private static void RPC_StatCredit(long sender, ZPackage package)
@@ -71,6 +82,15 @@ namespace ServerAuthority
                     PlayerStatType stat = (PlayerStatType)package.ReadInt();
                     float amount = package.ReadSingle();
                     bool cheated = package.ReadBool();
+                    Profile()?.IncrementStat(stat, amount, cheated);
+                    break;
+                }
+                case Kind.ToolStat:
+                {
+                    PlayerStatType stat = (PlayerStatType)package.ReadInt();
+                    float amount = package.ReadSingle();
+                    Player player = Player.m_localPlayer;
+                    bool cheated = player != null && player.GetInventory().CheatedDamagingItemEquipped();
                     Profile()?.IncrementStat(stat, amount, cheated);
                     break;
                 }

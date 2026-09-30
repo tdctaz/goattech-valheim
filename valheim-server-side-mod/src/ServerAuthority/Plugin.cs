@@ -116,7 +116,8 @@ namespace ServerAuthority
             Patches.Ship_CustomFixedUpdate_Diagnostic.Forget();
 #endif
             TriggerAoeSetup.Reset();
-            CookingCollect.Reset();
+            RpcTakeover.Reset();
+            EarnedStats.Reset();
             SummonSkill.Reset();
             Plugin.EvaluateSession();
             KillCredit.Register();

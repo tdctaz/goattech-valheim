@@ -4,10 +4,6 @@ namespace ServerAuthority
 {
     internal static class CookingCollect
     {
-        private const string Rpc = "RPC_RemoveDoneItem";
-        private static readonly int RpcHash = Rpc.GetStableHashCode();
-        private static bool _warnedMissing;
-
         private sealed class Collector
         {
             internal long Peer;
@@ -17,34 +13,10 @@ namespace ServerAuthority
             internal string Name;
         }
 
-        internal static void Reset()
-        {
-            _warnedMissing = false;
-        }
-
         internal static void TakeOver(CookingStation station)
         {
-            ZNetView view = station.m_nview;
-            if (view == null || view.GetZDO() == null)
-            {
-                return;
-            }
-
-            if (!view.m_functions.ContainsKey(RpcHash))
-            {
-                if (!_warnedMissing)
-                {
-                    _warnedMissing = true;
-                    Plugin.Log.LogWarning(
-                        $"{Utils.GetPrefabName(station.gameObject)} has no {Rpc} handler to take over, so collecting " +
-                        "from cooking stations runs vanilla's code on the server. Re-read CookingStation after this game update.");
-                }
-
-                return;
-            }
-
-            view.Unregister(Rpc);
-            view.Register<Vector3, int>(Rpc, (sender, userPoint, amount) => RemoveDoneItem(station, sender, userPoint, amount));
+            RpcTakeover.Replace<Vector3, int>(station, station.m_nview, "RPC_RemoveDoneItem",
+                (sender, userPoint, amount) => RemoveDoneItem(station, sender, userPoint, amount));
         }
 
         private static void RemoveDoneItem(CookingStation station, long sender, Vector3 userPoint, int amount)

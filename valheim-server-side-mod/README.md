@@ -1417,13 +1417,65 @@ A seventh trains the server's copy of a player instead of the player:
    from each prefab that is dropped, which happens only while the summoner's character is being torn
    down and has no owner to send to.
 
+An eighth counts a player's work for whoever owns what they worked on:
+
+8. **Stats counted by the owner of the thing being hit.** `TreeBase.RPC_Damage` counts `TreeChops`
+   for every hit that does damage, and `Tree` and `TreeTier0` to `TreeTier5` when the tree falls.
+   `TreeLog.RPC_Damage` counts `LogChops` and `Logs` the same way, `MineRock.RPC_Hit` and
+   `MineRock5.DamageArea` count `MineHits` and, when a piece breaks, `Mines` and `MineTier0` to
+   `MineTier5`, and `Character.RPC_Damage` counts `EnemyHits` for every damage message it receives,
+   before it even checks ownership. All of them run on the owner and count only when the attacker
+   is `Player.m_localPlayer`. `Tameable.Tame` counts `CreatureTamed` in the profile of whichever
+   machine runs it. In vanilla a player usually owns what they are hitting, so these mostly land.
+   Here the server owns every tree, rock and creature, so no player earned any of them, and
+   GrindTrees, which asks for 500 `Tree`, could never unlock. The rest show only on the stats page.
+
+   `EarnedStats.cs` credits them from the server. It takes over five RPC handlers:
+   `TreeBase.RPC_Damage`, `TreeLog.RPC_Damage`, `MineRock`'s `Hit`, `MineRock5.RPC_Damage`, and
+   **the `RPC_Damage` of every non-player `Character` on the server**, which every hit on every
+   creature passes through. Each is replaced from a postfix on the method that registers it
+   (`Awake`, or `Start` for `MineRock`), under the same conditions, with a lambda that calls
+   vanilla's method as an ordinary call and compares the object before and after to see what
+   vanilla would have counted. Health that dropped is a chop or a mining hit, a tree or log that is
+   gone has fallen, and a hit area at zero health has broken. `MineRock5` keeps its health as one
+   encoded string, so there a change in the ZDO's data revision says the hit saved new health, which
+   vanilla does only when it dealt damage. The credit goes, through `StatCredit.cs`, to the
+   attacker's own client when the attacker is a `Player` the server does not own, with vanilla's
+   stat types and tier numbering. `EnemyHits` is credited only for a hit the server handles as the
+   creature's owner: a creature the policy has left ownerless for a moment turns the attacker's
+   damage message into a broadcast, which the attacker's own client already counts, as in vanilla.
+   Vanilla marks `LogChops`, `Logs` and the mining stats cheated when the attacker has a cheated
+   weapon equipped, and never the tree stats. The server's copy of a player has no inventory, so the
+   client checks its own when the credit arrives. The achievement check runs inside
+   `PlayerProfile.IncrementStat` whatever called it, so GrindTrees unlocks from a credit exactly as
+   from a local chop.
+
+   `CreatureTamed` goes, from a prefix on `Tameable.Tame`, to the player vanilla tells the creature
+   is tamed, the closest within 30 m, or failing that the closest player whose active area holds
+   the creature, since taming only needs the creature fed and the feeder may have walked off.
+   Vanilla credits whichever client owns the creature, normally the one tending it, and the server
+   cannot see who fed it, so the player the game congratulates is the fairest choice.
+
+   `RpcTakeover.cs` does the unregister and register for these and for the cooking station. It
+   warns once a session if a handler it expects is missing, or if the handler it replaces is not
+   the component's own, which would mean another mod's replacement is being discarded. Each credit
+   is one small message to the attacker's client: one for a chop, mining hit or creature hit, two
+   for a log that breaks, three for a felled tree or a broken rock piece, and one per area for a
+   hit that `MineRock5` spreads over several, as vanilla counts them. A hit already sends the
+   damage message, a damage text to every peer and a health update. The first credit of each stat
+   per session is logged, and every tame is, saying whether the credit reached a connected client.
+   `EarnedStats` reproduces the counting conditions of `TreeBase.RPC_Damage`, `TreeLog.RPC_Damage`,
+   `MineRock.RPC_Hit`, `MineRock5.DamageArea`, `Character.RPC_Damage` and `Tameable.Tame`, so
+   re-read those after a game update.
+
 To find more after a game update, scan the decompiled source for `Player.m_localPlayer`
 dereferences inside `RPC_*` methods that have no null guard, then check how each RPC is invoked:
 ones sent to a specific peer are client-only and safe, while owner-targeted and `Everybody` ones
 now execute on the server. Follow the ordinary methods those RPCs and other owner-run code call as
 well, since the Frost Foundry's dereference sat in `SpawnItem`, not in the RPC. And look for writes
 to `Game.instance.GetPlayerProfile()` or `Game.instance.IncrementPlayerStat` in owner-run code:
-they throw nothing and land in the server's own profile. The same goes for owner-run code that
+they throw nothing and land in the server's own profile, or behind a comparison with
+`Player.m_localPlayer` they are simply never counted. The same goes for owner-run code that
 writes another character's state, as a tamed creature's `RaiseSkill` writes its summoner's
 `Skills`: if that character is a player, the server only has a shell of it, and the write lands in
 a copy that is never saved.
@@ -1478,6 +1530,8 @@ src/ServerAuthority/
   CookingCollect.cs       Collects from cooking stations on the server, crediting the collecting player
   StatCredit.cs           Counts a stat, item craft or skill gain for one player, sent by the server
   SummonSkill.cs          Sends a summon's skill gain to its summoner's own client
+  EarnedStats.cs          Sends chopping, mining, hit and taming stats to the player who earned them
+  RpcTakeover.cs          Replaces a vanilla RPC handler on the server with one that wraps or redoes it
   Integrity/              Mod manifest, character storage, validation, and both ends of the protocol
   Patches/                One file per subsystem, each explaining what vanilla does and why it changes
 tools/PatchCheck/              Resolves every patch target against the game assembly
