@@ -226,7 +226,9 @@ namespace ValheimCreatures
                     "Its remaining creatures stop hunting and stay as ordinary monsters.",
                     new AcceptableValueRange<float>(10f, 600f)));
             RaidSpawnDistance = config.Bind("Raids", "SpawnDistance", 40f,
-                new ConfigDescription("How far from a player inside the raid area each group of a wave appears.",
+                new ConfigDescription(
+                    "How far from a player inside the raid area each group of a wave appears. Groups never appear " +
+                    "inside a player base or under cover, and the search reaches out to twice this to get clear of one.",
                     new AcceptableValueRange<float>(10f, 90f)));
 
             ScalePerStar = config.Bind("Looks", "ScalePerStar", 0.05f,

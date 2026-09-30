@@ -8,6 +8,7 @@ namespace ValheimCreatures
         private const string RaidsRpc = "ValheimCreatures_Raids";
         private const float SendSeconds = 2f;
         private const float ComfortSearchRadius = 30f;
+        private const float PlacementRetrySeconds = 30f;
 
         private sealed class Raid
         {
@@ -231,10 +232,16 @@ namespace ValheimCreatures
                 {
                     if (waveUp == null)
                     {
-                        SpawnWave(raid, players, balance);
-                        raid.WaveUp = true;
-                        raid.HeldLogged = false;
-                        waveUp = raid;
+                        if (SpawnWave(raid, players, balance))
+                        {
+                            raid.WaveUp = true;
+                            raid.HeldLogged = false;
+                            waveUp = raid;
+                        }
+                        else
+                        {
+                            raid.NextWave = raid.InArea + PlacementRetrySeconds;
+                        }
                     }
                     else if (!raid.HeldLogged)
                     {
@@ -271,17 +278,26 @@ namespace ValheimCreatures
             }
         }
 
-        private static void SpawnWave(Raid raid, List<Vector3> players, Balance balance)
+        private static bool SpawnWave(Raid raid, List<Vector3> players, Balance balance)
         {
-            raid.Spawned++;
             List<string> names = new List<string>();
             List<ZDOID> spawned = WaveSpawner.Spawn(raid.Template,
-                () => WaveSpawner.Around(players[Random.Range(0, players.Count)], balance.RaidSpawnDistance),
+                data => WaveSpawner.Around(players[Random.Range(0, players.Count)], balance.RaidSpawnDistance, data),
                 "raid", null, names);
+            if (names.Count == 0)
+            {
+                Plugin.Log.LogInfo(
+                    $"Raid {raid.Template.m_name} wave {raid.Spawned + 1} of {raid.Waves} found no open ground outside " +
+                    $"the base; trying again in {PlacementRetrySeconds:0} seconds.{WaveSpawner.Rejected()}");
+                return false;
+            }
+
+            raid.Spawned++;
             raid.Creatures.AddRange(spawned);
             Plugin.Log.LogInfo(
-                $"Raid {raid.Template.m_name} wave {raid.Spawned} of {raid.Waves}: " +
-                $"{(names.Count > 0 ? string.Join(", ", names) : "nothing, no open ground found")}.");
+                $"Raid {raid.Template.m_name} wave {raid.Spawned} of {raid.Waves}: {string.Join(", ", names)}." +
+                WaveSpawner.Rejected());
+            return true;
         }
 
         private static Raid RaidWithWaveUp()

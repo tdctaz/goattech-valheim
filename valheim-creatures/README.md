@@ -125,7 +125,10 @@ On a dedicated server, raids come in waves instead of running for a fixed time:
   wave, and two at comfort 10; a full group in a well furnished base faces eight.
 - A wave is the raid's own spawn: one group of every creature in it, with the raid's group sizes,
   the same as a summoning boss's wave. They appear about 40m from a player inside the raid's area
-  and hunt the players.
+  and hunt the players. Like vanilla, they never appear inside a player base, the area around a
+  workbench, forge or fire, nor under a roof or overhang. The search reaches out to twice the
+  distance to get clear of a large base, and a wave that still finds no open ground is not used
+  up: it tries again 30 seconds later.
 - Only one wave is alive at a time. The next wave comes 3 minutes after the last creature of the
   previous one dies. The clock only runs while a player is inside the area, so leaving pauses the
   attack rather than ending it.
@@ -207,8 +210,8 @@ Regeneration is about 6 health a second for Bonemass and 12.5 for Yagluth. Bonem
 which puts out fire, so a green Bonemass has to be outdamaged; that is part of the challenge.
 
 A summoning boss calls its waves at 82, 64, 46, 28 and 10 percent health. Each wave is one group of
-every creature in the boss's raid, as the raid itself spawns them, 30m from the boss, and they hunt
-the players. The server remembers how many waves a boss has called, so healing back above a
+every creature in the boss's raid, as the raid itself spawns them, 30m from the boss, outside any
+player base and not under cover, and they hunt the players. The server remembers how many waves a boss has called, so healing back above a
 threshold never calls that wave again. Their stars and colors are rolled as for any other spawn.
 
 | Boss | Raid | One wave |
@@ -284,7 +287,7 @@ connected to a server; a client's own copy applies in single player and when hos
 | `Raids.PlayerWavesMax` | `5` | Most waves from players in the area beyond the first. |
 | `Raids.ComfortPerWave` | `5` | Comfort per extra wave; 0 turns it off. |
 | `Raids.TimeoutMinutes` | `120` | |
-| `Raids.SpawnDistance` | `40` | Meters from a player in the area. |
+| `Raids.SpawnDistance` | `40` | Meters from a player in the area, reaching out to twice this to get clear of a base. |
 | `Looks.ScalePerStar` | `0.05` | Local. Size added per star past two. |
 | `Looks.SaturationPerStar` | `0.1` | Local. |
 | `Looks.ValuePerStar` | `-0.05` | Local. Brightness; negative is darker. |
