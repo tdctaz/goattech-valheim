@@ -294,7 +294,7 @@ namespace ValheimCreatures
             raid.Creatures.AddRange(spawned);
             Plugin.Log.LogInfo(
                 $"Raid {raid.Template.m_name} wave {raid.Spawned} of {raid.Waves}: {string.Join(", ", names)}." +
-                WaveSpawner.Rejected());
+                WaveSpawner.Placements() + WaveSpawner.Rejected());
             return true;
         }
 

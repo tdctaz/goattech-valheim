@@ -11,6 +11,7 @@ namespace ValheimCreatures
         private const float FarthestReach = 2f;
 
         private static readonly List<string> Dropped = new List<string>();
+        private static readonly List<string> Placed = new List<string>();
 
         private static int _inBase;
         private static int _covered;
@@ -25,6 +26,7 @@ namespace ValheimCreatures
             _water = 0;
             _noFloor = 0;
             Dropped.Clear();
+            Placed.Clear();
             List<ZDOID> spawned = new List<ZDOID>();
             foreach (SpawnSystem.SpawnData data in raid.m_spawn)
             {
@@ -45,6 +47,7 @@ namespace ValheimCreatures
                     continue;
                 }
 
+                Placed.Add(Describe(data.m_prefab.name, count, center.Value));
                 for (int i = 0; i < count; i++)
                 {
                     Vector3 position = count > 1 ? Member(center.Value, data) : center.Value;
@@ -99,6 +102,51 @@ namespace ValheimCreatures
             }
 
             return text;
+        }
+
+        internal static string Placements()
+        {
+            return Placed.Count > 0 ? $" Placed {string.Join("; ", Placed)}." : "";
+        }
+
+        private static string Describe(string name, int count, Vector3 point)
+        {
+            float player = float.MaxValue;
+            foreach (Player each in Player.GetAllPlayers())
+            {
+                if (each != null)
+                {
+                    player = Mathf.Min(player, Utils.DistanceXZ(each.transform.position, point));
+                }
+            }
+
+            float edge = float.MaxValue;
+            string piece = "";
+            foreach (EffectArea area in EffectArea.GetAllAreas())
+            {
+                if (area == null || (area.m_type & EffectArea.Type.PlayerBase) == 0)
+                {
+                    continue;
+                }
+
+                float distance = Utils.DistanceXZ(area.transform.position, point) - area.GetRadius();
+                if (distance < edge)
+                {
+                    edge = distance;
+                    piece = Utils.GetPrefabName(area.transform.root.gameObject);
+                }
+            }
+
+            string text = $"{name} x{count} at ({point.x:0}, {point.z:0})";
+            text += player < float.MaxValue ? $", {player:0} m from the nearest player" : ", no player loaded";
+            if (edge == float.MaxValue)
+            {
+                return text + ", no base area loaded";
+            }
+
+            return text + (edge >= 0f
+                ? $", {edge:0} m outside the nearest base area ({piece})"
+                : $", {-edge:0} m inside the base area of {piece}");
         }
 
         internal static Vector3? Around(Vector3 origin, float distance, SpawnSystem.SpawnData data)

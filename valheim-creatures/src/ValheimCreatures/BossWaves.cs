@@ -79,7 +79,7 @@ namespace ValheimCreatures
 
             Plugin.Log.LogInfo(
                 $"{Utils.GetPrefabName(boss.gameObject)} called wave {wave} of {balance.BossWaveCount} from {raid}: " +
-                $"{(spawned.Count > 0 ? string.Join(", ", spawned) : "nothing")}.{WaveSpawner.Rejected()}");
+                $"{(spawned.Count > 0 ? string.Join(", ", spawned) : "nothing")}.{WaveSpawner.Placements()}{WaveSpawner.Rejected()}");
         }
 
         private static string RaidFor(string boss, string mapping)
