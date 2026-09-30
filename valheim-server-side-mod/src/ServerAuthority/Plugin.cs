@@ -124,6 +124,7 @@ namespace ServerAuthority
             KillCredit.Register();
             StatCredit.Register();
             PlayerLaunch.Register();
+            BedSpawnPoint.Register();
 
             if (__instance.IsServer())
             {

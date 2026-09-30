@@ -1587,17 +1587,50 @@ A tenth reads a player's status effects where only their own client has them:
     so, once a session, is a published hash that is not a pheromone effect in `ObjectDB`, which
     would mean a game update renamed or unregistered a mead and it silently stopped working.
 
+An eleventh edits the profile of whichever machine owns the object:
+
+11. **A bed's spawn point cleared on the wrong machine.** `WearNTear.Destroy` runs on the piece's
+    owner and, for a bed, calls `Game.RemoveCustomSpawnPoint` with the bed's spawn point, which
+    clears the local profile's custom spawn point if it is exactly that point. Every way a bed goes
+    ends there: removal with the hammer through `RPC_Remove`, damage from any source through
+    `RPC_Damage` and `ApplyDamage`, and wear and lost support through `UpdateWear` and
+    `ApplyDamage`, all on the owner. Nothing else on an owner touches spawn points: the bed's own
+    `Interact` sets them on the player's client, and `Game.FindSpawnPoint` reads and clears them
+    there. Vanilla assumes the owner is the player who claimed the bed, which `Bed.Interact` does
+    without any need to sleep in it. Here the owner is the server, so only the server's profile was
+    tested, which has no custom spawn point, and the player kept a spawn point at a bed that no
+    longer exists. Their map kept the bed pin, which `Minimap` rebuilds from the profile,
+    and on their next death the game loaded the area around the old bed, waited, found no bed
+    within 1 m and only then cleared the point and sent them to the start.
+
+    `BedSpawnPoint.cs` handles it from a prefix on `WearNTear.Destroy`. For a claimed bed the server
+    owns, it sends every client the owner's player id, from the bed's `s_owner`, and the bed's spawn
+    point. The client whose own profile has that player id runs vanilla's `RemoveCustomSpawnPoint`
+    against it, so the same exact-point test decides, and the map pin disappears on the minimap's
+    next update. Broadcasting rather than looking the owner up by character reaches a player who is
+    connected but has no character at that moment: dead and waiting to respawn, loading in, or held
+    at login by the server side character check. It also covers two players sharing a copied
+    character id, and tells no client anything the bed's own ZDO does not already. With server side
+    characters the change reaches the stored character on the client's next save. A player who is
+    not connected at all gets nothing: vanilla has no way to reach an absent player either, and
+    the only record of their spawn point is their character. Editing the stored character on the
+    server for them was rejected as far more machinery than a stale pin and one slow respawn
+    justify, and vanilla's check at their next death already clears it. Each destroyed claimed bed
+    is logged with its owner and point, and the owner's client logs what it did, printing both
+    points in full when it keeps a spawn point that is not this bed's.
+
 To find more after a game update, scan the decompiled source for `Player.m_localPlayer`
 dereferences inside `RPC_*` methods that have no null guard, then check how each RPC is invoked:
 ones sent to a specific peer are client-only and safe, while owner-targeted and `Everybody` ones
 now execute on the server. Follow the ordinary methods those RPCs and other owner-run code call as
 well, since the Frost Foundry's dereference sat in `SpawnItem`, not in the RPC. And look for writes
-to `Game.instance.GetPlayerProfile()` or `Game.instance.IncrementPlayerStat` in owner-run code:
-they throw nothing and land in the server's own profile, or behind a comparison with
-`Player.m_localPlayer` they are simply never counted. The same goes for owner-run code that
-writes another character's state, as a tamed creature's `RaiseSkill` writes its summoner's
-`Skills`: if that character is a player, the server only has a shell of it, and the write lands in
-a copy that is never saved.
+to `Game.instance.GetPlayerProfile()` or `Game.instance.IncrementPlayerStat` in owner-run code,
+and for `Game` methods that edit `m_playerProfile` directly, such as `Game.RemoveCustomSpawnPoint`,
+which a search for `GetPlayerProfile()` does not find: they throw nothing and land in the server's
+own profile, or behind a comparison with `Player.m_localPlayer` they are simply never counted.
+The same goes for owner-run code that writes another character's state, as a tamed creature's
+`RaiseSkill` writes its summoner's `Skills`: if that character is a player, the server only has a
+shell of it, and the write lands in a copy that is never saved.
 
 ## Game updates
 
@@ -1650,6 +1683,7 @@ src/ServerAuthority/
   CookingCollect.cs       Collects from cooking stations on the server, crediting the collecting player
   StatCredit.cs           Counts a stat, item craft or skill gain for one player, sent by the server
   PlayerLaunch.cs         Sends a launch aimed at the server's copy of a player to their client
+  BedSpawnPoint.cs        Tells a destroyed bed's owner to drop it as their spawn point
   PlayerEffects.cs        Publishes each player's active pheromone effects on their own ZDO
   Pheromones.cs           Lets the anti-sting and troll love meads work on server-owned creatures
   SummonSkill.cs          Sends a summon's skill gain to its summoner's own client
