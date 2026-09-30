@@ -1160,6 +1160,28 @@ have the local state vanilla quietly assumes an owner has. Seven kinds, nearly a
      the 1.4 s to receive ownership, the shot is still lost, as it would be in vanilla, where the
      request goes to whichever client owns the catapult; firing from the server instead would
      risk a second shot.
+   - A push on a creature. `Character.ApplyPushback(dir, force)` only stores a push in the local
+     field `m_pushForce`, which the owner's movement code then feeds into the body; on any other
+     machine it does nothing. A hit's own push travels with the damage to the owner, but the
+     separate knockback in `Aoe.OnHit`, `m_knockBackForce`, is applied directly on whichever
+     machine runs the AoE. Three AoEs have it, all run on a client: `staff_thunderblood_aoe`
+     (25) and the upgrade station's `fx_UpgradeStation_Success` (8) and `_Fail` (13). In vanilla
+     the client often owns the creatures around it and the push works; here every creature is the
+     server's, so it was always lost. For the staff that hardly shows, since its hit already
+     carries an `m_attackForce` push of 100 and `ApplyPushback` keeps only the larger one, but the
+     upgrade bursts carry a push of 0 and 2, so they never moved the tames around the station.
+     `RemotePush.cs` handles it from a prefix on `ApplyPushback`, which is not an RPC method. On a
+     client, a push on a character the server owns is sent to the server with the character's
+     ZDOID, direction and force, and the server, for a connected sender and a character it owns,
+     calls the same `ApplyPushback` itself; the pointless local call is skipped. Folding the
+     knockback into the hit's own push was rejected: that runs through blocking and the other early
+     returns in `RPC_Damage`, which vanilla's knockback does not, and would need the hit changed
+     inside `OnHit`. Pushes on players another client owns are left as vanilla, which loses those
+     too; forwarding them would let one client move another player. A client can push any
+     server-owned creature this way, which only matters against a deliberate cheater; the server
+     rejects a force or direction that is not a finite number and caps the force at 50, twice the
+     staff's knockback, so a push cannot break a creature's movement. The first push sent and the
+     first applied per session are logged.
 3. **Nothing. The boat failure was this mod's own bug**, and it is worth recording because the
    first two explanations written here were both wrong. A server-owned hull sank, tumbled and
    exploded, which was blamed first on the server having no water volumes and then on an
@@ -1566,10 +1588,10 @@ A ninth moves the server's copy of a player instead of the player:
    The other local-only push in `Aoe.OnHit`, `m_knockBackForce` through `Character.ApplyPushback`,
    is not the same shape. Three AoEs set it, `staff_thunderblood_aoe` (25) and
    `fx_UpgradeStation_Success` and `_Fail` (8 and 13), and all three are spawned by a client, so no
-   server-owned AoE pushes a player that way. The reverse does happen and is not handled here: the
-   thunderblood staff's knockback and the upgrade station's success and failure bursts push
-   server-owned creatures, such as tames standing nearby, by writing to the client's own copy of
-   them, and the push is lost.
+   server-owned AoE pushes a player that way. The reverse does happen: the thunderblood staff's
+   knockback and the upgrade station's success and failure bursts push server-owned creatures,
+   such as tames standing nearby, from the client. That is handled separately, under
+   [What the server cannot do](#what-the-server-cannot-do), as a push on a creature.
 
 A tenth reads a player's status effects where only their own client has them:
 
@@ -1881,6 +1903,7 @@ src/ServerAuthority/
   PlayerFlags.cs          Publishes ghost mode and cinematic playback on each player's own ZDO
   CreatureSenses.cs       Hides ghost-mode, flying and cinematic-watching players from server AI
   PetFaces.cs             Picks a server-owned pet rock's face on each client from its own player
+  RemotePush.cs           Sends a client's push on a server-owned creature to the server
   Pheromones.cs           Lets the anti-sting and troll love meads work on server-owned creatures
   SummonSkill.cs          Sends a summon's skill gain to its summoner's own client
   EarnedStats.cs          Sends chopping, mining, hit and taming stats to the player who earned them

@@ -123,6 +123,7 @@ namespace ServerAuthority
             CatapultLoad.Reset();
             CreatureSenses.Reset();
             PetFaces.Reset();
+            RemotePush.Reset();
             Patches.ArcheryTarget_OnProjectileHit_Patch.Reset();
             SummonSkill.Reset();
             Plugin.EvaluateSession();
@@ -130,6 +131,7 @@ namespace ServerAuthority
             StatCredit.Register();
             PlayerLaunch.Register();
             BedSpawnPoint.Register();
+            RemotePush.Register();
 
             if (__instance.IsServer())
             {
