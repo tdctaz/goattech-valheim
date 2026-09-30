@@ -1659,6 +1659,33 @@ A twelfth asks the local player a question on the server's behalf:
     test against the server's own profile is dropped, since that profile belongs to nobody. The
     first answer each way for each ward per session is logged.
 
+A thirteenth waits for a local player before doing something for everyone:
+
+13. **Hugin's Ashlands ocean hint.** `Ship.TakeAshlandsDamage` runs on a ship's owner every fixed
+    update. Once the hull is in Ashlands water, and the ship is not one built for it, it sets the
+    world key `AshlandsOcean`, but only if `Player.m_localPlayer` exists, and then again every 10 s
+    for as long as it stays there. The `Tutorial` component shows the `ashlandsocean` text, Hugin's
+    warning about the burning sea, to every client once that key exists, and each player sees it
+    once. The local player test stands for "a client owns this ship", which in vanilla is always
+    the case for a ship anyone is near, whether they sail it or merely own the zone it drifts in;
+    it is only false on a dedicated server, which vanilla never lets simulate a ship. Here the
+    server owns every ship unless `KeepShipOwnedByDriver` is on, so the key was never set and no
+    player was ever warned.
+
+    A postfix on `TakeAshlandsDamage` sets the key from the server under the same conditions:
+    the ship is not Ashlands-ready, the hull is in Ashlands water by vanilla's own gradient test,
+    and a player whose active area holds the ship is there to have been its owner. It does nothing
+    once the key exists. One deviation: vanilla applies the water test only to ships that have
+    Ashlands damage effects, so a ship without them would set the key anywhere on the map. Of the
+    ship prefabs, `VikingShip`, `Karve` and `Raft` have the effects, `VikingShip_Ashlands` is
+    Ashlands-ready, and `Trailership` has neither, but nothing in the game builds or places a
+    `Trailership`: it appears only in `ZNetScene`'s prefab list, so only the `spawn` console command
+    produces one. The server requires the Ashlands water for every ship, since a key set in the
+    Meadows would bring Hugin's Ashlands warning long before it means anything. Vanilla's 10 s timer only repeats a key that is already set, and a key
+    the server sets takes effect at once, so testing for the key keeps the same world state with
+    a single message. The server logs the ship, its position and the nearby player when it sets
+    the key.
+
 To find more after a game update, scan the decompiled source for `Player.m_localPlayer`
 dereferences inside `RPC_*` methods that have no null guard, then check how each RPC is invoked:
 ones sent to a specific peer are client-only and safe, while owner-targeted and `Everybody` ones
