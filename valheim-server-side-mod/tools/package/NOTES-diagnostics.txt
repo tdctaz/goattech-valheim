@@ -34,9 +34,8 @@ Mode
               caused by this mod. Everything else still loads.
 
 ServerOwnsWaterborne
-    Lets the server own boats and floating objects. Leave false. True was what
-    destroyed boats during development, by the server and the person steering
-    taking turns simulating the same hull.
+    Lets the server own boats and floating objects. Leave true: every
+    passenger then gets the same hull physics whoever is steering.
 
 [Performance]
 
@@ -49,9 +48,38 @@ ServerFrameRate
     it to 120 if interactions feel sluggish and the CPU has headroom.
 
 ZdoSendRate
-    How often the server flushes object updates to each client, in Hz. Vanilla
-    is 20. Raising it makes things the server spawns, such as the items a
-    picked bush drops, appear sooner, at the cost of bandwidth per client.
+    How many times per second each player is sent the objects that changed
+    around them. Vanilla aims at 20. Raising it makes creatures move more
+    smoothly and things the server spawns appear sooner, at the cost of
+    bandwidth and server CPU.
+
+FairZdoSending
+    Leave true. Vanilla serves one player per server frame in turn, so each
+    player's rate falls as players join: at 60 fps about 20 per second for
+    one or two players, 10 for five, 6.7 for eight. True gives every player
+    ZdoSendRate. False is only for comparing against vanilla.
+
+FollowLivePlayerPosition
+    Leave true. The server builds, simulates and sends the world around where
+    each player's character is now, instead of where the client last reported
+    it, which can be two seconds old.
+
+ZdoSendWindowMaxKiB
+    Most object data that may be on its way to one player at once. Vanilla
+    allows 10 KiB, which caps a player at about 10 KiB per round trip. The
+    window is sized per player from their ping and the Steam send rate, up to
+    this cap. 10 is vanilla.
+
+SteamSendRateKiB
+    The fixed rate Steam sends to each player at. Vanilla is 150. At peak the
+    server may send this to every player at once: 384 for eight players is
+    about 25 Mbit/s of upload. Lower it if the server's upload is smaller.
+    0 keeps vanilla.
+
+ClearTeleportGhosts
+    Leave true. Fixes players seeing a frozen copy of someone standing at the
+    portal they just went through. Each cleanup is logged as "Cleared a
+    teleport ghost".
 
 MaxObjectsCreatedPerFrame
     Lower if the server stutters when players explore quickly. Raise if
@@ -64,10 +92,14 @@ ZoneEvictionsPerTick
 
 [Vehicles]
 
-KeepShipOwnedByDriver, KeepVehiclesOwnedByUser
-    Keep ships with whoever is steering, and mounts and carts with whoever is
-    using them. Leave both true. Turning them off makes those things answer
-    input a round trip late, and in the case of carts detach entirely.
+KeepShipOwnedByDriver
+    Leave false. True hands a steered ship back to whoever is at the rudder.
+    That is only a fallback for when server simulation of ships misbehaves;
+    the server owning the ship is the intended state.
+
+KeepVehiclesOwnedByUser
+    Keep mounts and carts with whoever is using them. Leave true. Turning it
+    off makes them answer input a round trip late, and carts detach entirely.
 
 [Debug]
 
@@ -77,6 +109,36 @@ A normal build ignores them.
 
 StatusIntervalSeconds
     See above. 60 is a good default, 0 turns it off.
+
+PerformanceReportSeconds, NetworkSaturationWarning
+    Every report interval the log gets the server's frame rate and then one
+    line per player about object updates, for example:
+
+      Test Maiden: 19.7 sends/s (19.3 with data), 1205 objects/s, 262.5 KiB/s,
+      window up to 38 KiB; 51% of sends full, 3% fell behind, 2% held back by
+      a full queue, backlog up to 107 object(s); ping 42 ms (worst 95),
+      delivery 100.0%, Steam queue up to 48 ms, Steam rate 384 KiB/s, Steam
+      out 245.3 KiB/s; send work 0.53 ms per send (worst 3.5 ms).
+      Most sent: 43% Deer, 34% Wolf, 6% Neck, ...
+
+    sends/s        should be near ZdoSendRate. Much lower means the server's
+                   frame rate is the limit.
+    full           the send ran out of window with changes left over. They go
+                   in the next send, 50 ms later. Harmless on its own.
+    fell behind    more was left over than the send carried. Changes pile up
+                   and that player sees creatures stutter.
+    held back      the window was still full from earlier sends.
+    Steam queue    how long new data waits behind queued data. Staying near
+                   100 ms or more while a player falls behind means the Steam
+                   rate is the limit: raise SteamSendRateKiB if upload allows.
+    send work      server CPU spent choosing and packing updates. Grows with
+                   the size of bases around the player.
+    Most sent      share of bytes by object type. Tells a tame pen, a raid and
+                   a base full of changing objects apart.
+
+    NetworkSaturationWarning logs the same line as a warning, at most once a
+    minute, when a player fell behind or was held back in at least that
+    percentage of sends over ten seconds.
 
 LogOwnershipChanges
     A line for every single ownership change. Very noisy, and on a busy server

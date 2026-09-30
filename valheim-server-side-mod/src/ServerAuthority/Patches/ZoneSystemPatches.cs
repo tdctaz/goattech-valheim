@@ -191,8 +191,9 @@ namespace ServerAuthority.Patches
     }
 
     /// <summary>
-    /// Vanilla asks whether the area around the local reference position is loaded. On a server
-    /// that area is the origin and is never built, so the answer would be a permanent no.
+    /// Vanilla asks whether the area around the local reference position is loaded. On a dedicated
+    /// server that position is pinned outside the world and never built, so the answer would be a
+    /// permanent no.
     /// </summary>
     [HarmonyPatch(typeof(ZoneSystem), nameof(ZoneSystem.IsActiveAreaLoaded))]
     internal static class ZoneSystem_IsActiveAreaLoaded_Patch

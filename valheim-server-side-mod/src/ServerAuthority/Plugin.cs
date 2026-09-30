@@ -76,6 +76,8 @@ namespace ServerAuthority
             OwnershipPolicy.Reset();
             SimulationAnchors.Reset();
             WaterQueries.EnsureLayerMask();
+            SteamSendRate.Reset();
+            SteamSendRate.Apply();
 
             string running = global::Version.CurrentVersion.ToString();
             if (running != VerifiedGameVersion)
@@ -104,6 +106,8 @@ namespace ServerAuthority
             LocalWind.Reset();
             CreaturesRaids.Reset();
             ServerControl.Reset();
+            ServerPerformance.Reset();
+            Patches.ZDOMan_SendZDOToPeers2_Patch.Reset();
             Patches.EnvMan_UpdateEnvironment_Patch.Forget();
             Patches.ShipEffects_CustomLateUpdate_Patch.Forget();
             Patches.Ship_CustomFixedUpdate_Patch.Forget();
@@ -139,6 +143,8 @@ namespace ServerAuthority
             LocalWind.Reset();
             CreaturesRaids.Reset();
             ServerControl.Reset();
+            ServerPerformance.Reset();
+            Patches.ZDOMan_SendZDOToPeers2_Patch.Reset();
             Patches.EnvMan_UpdateEnvironment_Patch.Forget();
             Patches.ShipEffects_CustomLateUpdate_Patch.Forget();
             Patches.Ship_CustomFixedUpdate_Patch.Forget();

@@ -6,9 +6,8 @@ namespace ServerAuthority.Patches
 {
     /// <summary>
     /// SlowUpdater hands every SlowUpdate instance the zone of ZNet.GetReferencePosition, which on a
-    /// server is the origin. StaticPhysics gates its settling and falling on that zone, so anything
-    /// more than an active area from world centre, which is everything, decides it is out of range
-    /// and never runs. Felled logs then never settle on the server that owns them. Rewriting the
+    /// dedicated server is pinned at (1000000, 0, 1000000), outside the world. StaticPhysics gates its
+    /// settling and falling on that zone, so everything decides it is out of range and never runs. Felled logs then never settle on the server that owns them. Rewriting the
     /// argument to the nearest player's zone leaves vanilla's own logic untouched.
     ///
     /// Plant is the only other SlowUpdate and takes the argument without using it, so crops are

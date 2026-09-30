@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using HarmonyLib;
 using UnityEngine;
 
 namespace ServerAuthority
@@ -15,7 +16,7 @@ namespace ServerAuthority
 
     /// <summary>
     /// Vanilla builds zones and objects around <c>ZNet.GetReferencePosition()</c>, which on a
-    /// dedicated server is the origin and means nothing. Everything in this mod works from this
+    /// dedicated server is pinned at (1000000, 0, 1000000), outside the world, and means nothing. Everything in this mod works from this
     /// list of connected players instead. It is rebuilt at most once per frame and reuses its
     /// buffers, because it is read from the per-frame object creation path.
     /// </summary>
@@ -93,7 +94,7 @@ namespace ServerAuthority
                     Characters.Add(peer.m_characterID);
                 }
 
-                Vector3 pos = peer.GetRefPos();
+                Vector3 pos = LivePosition(peer);
                 if (pos.sqrMagnitude < 1f)
                 {
                     continue;
@@ -105,6 +106,38 @@ namespace ServerAuthority
                     Position = pos,
                     Zone = ZoneSystem.GetZone(pos),
                 });
+            }
+        }
+
+        internal static Vector3 LivePosition(ZNetPeer peer)
+        {
+            if (ModConfig.FollowLivePlayerPosition.Value && !peer.m_characterID.IsNone())
+            {
+                ZDO character = ZDOMan.instance?.GetZDO(peer.m_characterID);
+                if (character != null)
+                {
+                    peer.m_refPos = character.GetPosition();
+                }
+            }
+
+            return peer.GetRefPos();
+        }
+    }
+
+    [HarmonyPatch(typeof(ZNet), nameof(ZNet.RPC_ServerSyncedPlayerData))]
+    internal static class ZNet_RPC_ServerSyncedPlayerData_Patch
+    {
+        private static void Postfix(ZNet __instance, ZRpc rpc)
+        {
+            if (!Plugin.ServerActive)
+            {
+                return;
+            }
+
+            ZNetPeer peer = __instance.GetPeer(rpc);
+            if (peer != null)
+            {
+                SimulationAnchors.LivePosition(peer);
             }
         }
     }

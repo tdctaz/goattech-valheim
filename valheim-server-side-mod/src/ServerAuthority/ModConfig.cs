@@ -13,6 +13,11 @@ namespace ServerAuthority
         internal static ConfigEntry<int> ZoneEvictionsPerTick;
         internal static ConfigEntry<int> ServerFrameRate;
         internal static ConfigEntry<int> ZdoSendRate;
+        internal static ConfigEntry<bool> FairZdoSending;
+        internal static ConfigEntry<bool> FollowLivePlayerPosition;
+        internal static ConfigEntry<bool> ClearTeleportGhosts;
+        internal static ConfigEntry<int> ZdoSendWindowMaxKiB;
+        internal static ConfigEntry<int> SteamSendRateKiB;
 
         internal static ConfigEntry<bool> KeepShipOwnedByDriver;
         internal static ConfigEntry<bool> KeepVehiclesOwnedByUser;
@@ -20,6 +25,10 @@ namespace ServerAuthority
         internal static ConfigEntry<bool> RequireLoadedAreaForWaterborneOwner;
 
         internal static ConfigEntry<float> StatusIntervalSeconds;
+        internal static ConfigEntry<float> PerformanceReportSeconds;
+        internal static ConfigEntry<int> SlowFrameRateWarning;
+        internal static ConfigEntry<int> HitchWarningMilliseconds;
+        internal static ConfigEntry<int> NetworkSaturationWarning;
         internal static ConfigEntry<bool> LogShipDamage;
         internal static ConfigEntry<float> WaveSyncIntervalSeconds;
 #if DEBUG_TOOLS
@@ -105,10 +114,51 @@ namespace ServerAuthority
 
             ZdoSendRate = config.Bind("Performance", "ZdoSendRate", 20,
                 new ConfigDescription(
-                    "How many times per second the server flushes object updates to each client. " +
-                    "Vanilla is 20. Raising it makes server-spawned objects, such as the items a " +
-                    "picked bush drops, appear sooner, at the cost of bandwidth.",
+                    "How many times per second each player is sent the objects that changed around them. " +
+                    "Vanilla aims at 20. Raising it makes creatures move more smoothly and server-spawned " +
+                    "objects, such as the items a picked bush drops, appear sooner, at the cost of " +
+                    "bandwidth and server CPU. Only a true per-player rate while FairZdoSending is on.",
                     new AcceptableValueRange<int>(5, 100)));
+
+            FairZdoSending = config.Bind("Performance", "FairZdoSending", true,
+                "Send every player object updates at ZdoSendRate however many are online.\nVanilla " +
+                "serves one player per server frame in turn, so each player's rate falls as players " +
+                "join: at 60 fps about 15 per second for up to three players, 10 for five, 6.7 for eight " +
+                "and 5.5 for ten. False restores that, for comparison.");
+
+            FollowLivePlayerPosition = config.Bind("Performance", "FollowLivePlayerPosition", true,
+                "Load, simulate and send the world around where each player's character actually is, " +
+                "read every frame.\nVanilla uses the position each client reports every two seconds, " +
+                "so the server's picture of a player trails by up to two seconds: 20 metres of sailing, " +
+                "or two seconds of waiting before a portal's destination starts streaming. False " +
+                "restores the reported position.");
+
+            ZdoSendWindowMaxKiB = config.Bind("Performance", "ZdoSendWindowMaxKiB", 64,
+                new ConfigDescription(
+                    "Most object data, in KiB, that may be on its way to one player at once, counting what " +
+                    "Steam has sent but the player has not yet confirmed.\nVanilla allows 10 KiB, so a " +
+                    "player can receive at most 10 KiB per round trip: about 100 KiB/s at 100 ms ping, less " +
+                    "for anyone further away. When a fight, a raid or a portal arrival produces more than " +
+                    "that, creatures update less often and the world fills in slowly. The window is sized " +
+                    "for each player from their ping and the Steam send rate, so it grows only as far as " +
+                    "their connection needs, up to this cap. 10 restores vanilla.",
+                    new AcceptableValueRange<int>(10, 256)));
+
+            SteamSendRateKiB = config.Bind("Performance", "SteamSendRateKiB", 384,
+                new ConfigDescription(
+                    "The rate, in KiB per second, Steam paces each player's connection at.\nSteam does " +
+                    "not measure a connection's bandwidth: it sends at exactly this rate whenever data is " +
+                    "waiting, and Valheim pins it at 150. Raising it shortens the burst of data after " +
+                    "joining or using a portal, as long as the server's upload can carry it for every " +
+                    "player at once. It only matters together with ZdoSendWindowMaxKiB, since vanilla's " +
+                    "window caps a player below 150 anyway. 0 leaves Valheim's 150.",
+                    new AcceptableValueRange<int>(0, 4096)));
+
+            ClearTeleportGhosts = config.Bind("Performance", "ClearTeleportGhosts", true,
+                "Tell players to drop their copy of anything that jumps out of their area, such as a " +
+                "player walking through a portal.\nVanilla checks whether an object left each player's " +
+                "area before it stores the object's new position, so it tests the old one, finds " +
+                "nothing left, and the players at the portal keep seeing a frozen copy standing there.");
 
             KeepShipOwnedByDriver = config.Bind("Vehicles", "KeepShipOwnedByDriver", false,
                 "Hand a crewed ship back to whoever is at the rudder, instead of the server " +
@@ -464,6 +514,35 @@ namespace ServerAuthority
                 new ConfigDescription(
                     "Periodically log how many sectors and objects the server is simulating. 0 disables.",
                     new AcceptableValueRange<float>(0f, 600f)));
+
+            PerformanceReportSeconds = config.Bind("Debug", "PerformanceReportSeconds", 600f,
+                new ConfigDescription(
+                    "Log the server's frame rate, worst frame and how much it is simulating this often. " +
+                    "One line per interval, so it can stay on. 0 disables.",
+                    new AcceptableValueRange<float>(0f, 3600f)));
+
+            SlowFrameRateWarning = config.Bind("Debug", "SlowFrameRateWarning", 20,
+                new ConfigDescription(
+                    "Log a warning when the server averages fewer frames per second than this over ten " +
+                    "seconds, listing the creatures near each player and the most common objects, so " +
+                    "the cause of lag can be read afterwards. At most one warning a minute. 0 disables.",
+                    new AcceptableValueRange<int>(0, 360)));
+
+            HitchWarningMilliseconds = config.Bind("Debug", "HitchWarningMilliseconds", 500,
+                new ConfigDescription(
+                    "Also log that warning when a single server frame takes longer than this, since a " +
+                    "long stall is felt as lag even when the average frame rate looks fine. 0 disables.",
+                    new AcceptableValueRange<int>(0, 60000)));
+
+            NetworkSaturationWarning = config.Bind("Debug", "NetworkSaturationWarning", 50,
+                new ConfigDescription(
+                    "Log a warning when, over ten seconds, at least this percentage of the object update " +
+                    "sends to a player fell behind, leaving more changes waiting than the send carried, or " +
+                    "were held back because earlier data had not been delivered yet. That player is then " +
+                    "seeing creatures and objects update less often than the send rate. The warning gives " +
+                    "the player's ping, Steam queue and rate, and what was being sent. At most one a " +
+                    "minute. 0 disables.",
+                    new AcceptableValueRange<int>(0, 100)));
         }
     }
 }

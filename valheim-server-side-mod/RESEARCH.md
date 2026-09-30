@@ -69,7 +69,9 @@ routed to the current owner (`RPC_Damage`, door use, cart `WantOwner`).
 The dedicated server runs the same Unity code base and *could* simulate everything, but
 it deliberately does not:
 
-1. **Its reference position is Vector3.zero.** `ZoneSystem.Update`
+1. **Its reference position is nowhere near the players.** It was Vector3.zero when this was
+   written; in 1.0 the headless build's `Game.FixedUpdate` pins it at (1000000, 0, 1000000),
+   outside the world, every physics tick. `ZoneSystem.Update`
    (`ZoneSystem.cs:942-949`) creates real, simulated "local zones" only around the local
    reference position. Around connected peers it creates only **ghost zones**
    (`SpawnMode.Ghost`): terrain and location ZDOs are generated, then the GameObjects are
@@ -250,8 +252,16 @@ What moved:
 - `ZDOMan.FindObjects` takes a visited-sector set, and `FindSectorObjects` takes a
   `SimulationDistance`. Sectors still map one to one onto `SectorIndex`, so per-sector iteration is
   unaffected.
-- `ZDO.m_tempSortValue` now doubles as a private `SaveClone` flag when negative. Vanilla's own sort
-  path writes non-negative distances into it, so reusing it for distance sorting stays consistent.
+- `ZDO.m_tempSortValue` now doubles as a private `SaveClone` flag when negative. The mod's own
+  object creation sort writes non-negative squared distances into it, which is safe. Vanilla's send
+  sort is not: `ServerSortSendZDOS` writes the distance minus 1.5 times the seconds since the ZDO was
+  last sent to that peer, capped at 100, so anything within 150 metres that has never been sent goes
+  negative, and `ClientSortSendZDOS` writes zero minus the same term. `ZDO.Reset` skips
+  `ZDOExtraData.Release` for a save clone, so a destroyed ZDO whose last sort key was negative keeps
+  its extra data for the rest of the session. The typical case is a dropped item that is sent once
+  and picked up. `ZDOExtraData.PrepareSave` clones every extra data dictionary on the main thread at
+  each save, leaked entries included. Small, but it grows with uptime. Unfixed. An earlier version
+  of this note said vanilla only ever wrote non-negative values here, which was wrong.
 - `SpawnSystem.UpdateSpawning` gained alt-biome spawners and `groupSalt` arguments.
 - `Ship.UpdateOwner` now runs every 2 seconds rather than 4.
 
@@ -286,3 +296,90 @@ What moved that touches the server's simulation:
 - `Player.UpdateBaseValue` records the max comfort stat on every check rather than only when the
   base value changes.
 - `ObjectDB.GetAllFoodItems` takes an exclusion list. No mod calls it.
+
+
+## 8. The network send path in 1.0.16
+
+Written while researching lag, and the basis for `NetworkStats`, `ZdoSendPatches` and
+`SteamSendRate`.
+
+### How a ZDO reaches a player
+
+- `ZDOMan.SendZDOToPeers2` has served one peer per call, round robin, since 0.216.8 (ComfyMods
+  ReturnToSender's changelog records the old all-peers `SendZDOToPeers` being removed then). A round
+  starts once 0.05 s have passed, so each peer is served every `max(N + 1 frames, ~50 ms)`. Measured
+  on the test server at 60 FPS: 19.5 sends a second for one player. Simulated: 20 for two, 15 for
+  three, 10 for five, 6.7 for eight, 5.5 for ten. At vanilla's 30 FPS, five players get 5 a second.
+- `ZDOMan.SendZDOs` sends nothing while the peer's queue exceeds 10240 bytes, and fills at most
+  10240 minus the queue, with a 2048 byte minimum. The queue is `ZSteamSocket.GetSendQueueSize`,
+  which adds Steam's pending reliable and unreliable bytes and its **sent but unacknowledged**
+  bytes. So it is a 10 KiB window over the round trip: at most 10 KiB per RTT per player.
+- Each changed ZDO is sent whole: ZDOID, owner and data revisions, owner, position, then the full
+  serialized data. Nothing is delta encoded. Measured from the test world, a creature costs 150 to
+  250 bytes per update and a tree, rock or piece 60 to 90, so one 10 KiB send carries about 50 moving
+  creatures.
+- `ZDO.Deserialize` upserts each key into `ZDOExtraData` and never clears, so a sender could send
+  only the keys that changed and an unmodified receiver would stay correct, as long as the sender
+  tracks what each peer already has. Not implemented; worth it only if bandwidth stays the limit.
+- `ZSteamSocket` sends everything reliable with Nagle (flag 8) and uncompressed. Only
+  `ZPlayFabSocket`, the crossplay socket, compresses, with zlib.
+- `ZSteamSocket.RegisterGlobalCallbacks` sets `SendRateMin` and `SendRateMax` to the same 153600.
+  Valve's GameNetworkingSockets does not estimate bandwidth: `SNP_InitializeConnection` sets the
+  rate to about 4380 bytes per RTT and `SNP_ClampSendRate` clamps it to the minimum and maximum,
+  and nothing raises it afterwards. The header says min and max "should always be set to the same
+  value". Raising only the maximum does nothing over the internet. Config values are looked up
+  through the inheritance chain on every read (`ConfigValue::Get`), so a global value set after the
+  listen socket exists still reaches every connection.
+- Clients report their reference position every 2 s (`ZNet.SendPeriodicData`); on the client it
+  is the player's body, written each physics tick by `Tracker`. The server's `CreateSyncList`, the
+  mod's anchors and the ownership pass all used that, two seconds stale. The player's character ZDO
+  is on the server and current.
+- `ZDO.InternalSetPosition` calls `SetSector`, which calls `ZDOMan.ZDOSectorInvalidated`, before it
+  stores the new position. The per-peer check (`ZDOPeer.ZDOSectorInvalidated`) tests whether
+  `zdo.GetPosition()` left the peer's area, and sees the old one. Anything that jumps, such as a
+  player using a portal, is never invalidated for the players it left, who keep a frozen copy.
+- Routed RPCs addressed to everybody go to every peer regardless of distance. They are small
+  (about 70 bytes), so filtering them by distance would save little.
+
+### What the mod changed
+
+- `SendZDOs` is replaced by a copy that is identical except for the window and statistics, so the
+  log can say per player how often sends run, how full they are, what is left over, the Steam
+  ping, queue and rate, and which prefabs use the bytes.
+- `SendZDOToPeers2` serves every peer at `ZdoSendRate` from a carried-over budget, each peer at
+  most once per frame.
+- The window is `rate x (1.25 RTT + 2 / ZdoSendRate)`, between 10 KiB and `ZdoSendWindowMaxKiB`,
+  from Steam's own per-connection RTT and rate. One send interval of allowance left Steam idle
+  between sends: on loopback, sends were full at 279 KiB/s with 384 allowed. Two keep it busy, and
+  bound queueing to about two send intervals when a player is saturated.
+- The Steam rate is set globally when the mod activates, to `SteamSendRateKiB` for both minimum and
+  maximum.
+- Anchors and every peer's `m_refPos` follow the character ZDO, restored after each client report.
+- `ZDO.InternalSetPosition` gets a postfix that repeats the invalidation once the position is
+  stored, when the zone changed.
+
+Measured on the loopback test server, one player, 30 tame wolves hunting deer:
+
+| | Vanilla behaviour | New defaults |
+| --- | --- | --- |
+| Sends per second | 19.5, 100% full | 19.7 |
+| Delivered | 135 KiB/s, Steam out 141 of 150 | 262 KiB/s at 384 |
+| Objects per second | about 600 | about 1200 |
+| Backlog | up to 2,231 objects | up to 107 |
+| Initial area load | 369 objects/s | 781 objects/s |
+
+### Checked and left alone
+
+- Compression would roughly halve the bytes (one mod reports 8.6 MB becoming 3.0 MB with zstd and a
+  trained dictionary), but needs framing and a handshake on both ends. Worth adding if the network
+  report shows players falling behind at the Steam rate.
+- `CreateSyncList` scans every object around the peer on every send. On a 698k object world one mod
+  measured 4.1 ms per call, cut to 0.07 ms with per-peer dirty sets. The report's send work shows
+  whether that matters here before anything that complex is written.
+- Ownership by ping or proximity, relay filtering and motion deadbands, which several mods do,
+  either contradict server ownership or trade correctness for little.
+- 1.0's incremental save only writes chunks marked dirty. `ZDOMan.RPC_ZDOData` applies a client's
+  change without marking its chunk, so a vanilla server can miss client-owned changes. Here the
+  server reclaims ownership within two seconds, and `ZDO.SetOwner` marks the chunk, which covers it.
+- 1.0 has a `-simulationdistance 0-6` server argument (2 is the classic 5x5 zones, 1 is 21 zones, 0
+  is 9). Lowering it is the cheapest way to cut server CPU if that ever becomes the limit.

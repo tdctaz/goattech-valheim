@@ -87,12 +87,12 @@ A server-owned hull needs the water under it to exist, and on a server that is n
   judged acceptable, because the alternative gives every passenger the driver's connection instead.
   The test was on a loopback connection, so if it feels wrong on a high latency server that is what
   `Vehicles.KeepShipOwnedByDriver` is for.
-- **The server does real work now.** Note that the two costs scale differently. The server loads
-  terrain and instantiates objects around **every** player regardless of mode, because a sector can
-  become contested at any moment and the takeover has to be instant, so memory cost is roughly
-  "one client's working set per player" either way. What `Contested` mode saves is the *simulation*
-  cost, physics and pathfinding and AI, which it only pays where players actually group up. Give the
-  machine real CPU and RAM.
+- **The server does real work now.** It loads terrain and instantiates objects around **every**
+  player, so memory cost is roughly "one client's working set per player", and it pays the
+  simulation cost, physics and pathfinding and AI, for all of it. Give the machine real CPU and RAM.
+- **The server sends more.** Every player's updates come from the server, at a higher rate and with
+  a bigger window than vanilla allows. See [Object updates](#object-updates) for the upload it
+  needs.
 - **Clients can still grab individual objects** when they interact with them, because
   `ZNetView.ClaimOwnership` is client-side and cannot be prevented without a client mod. The policy
   reclaims those within two seconds and it causes no visible glitch.
@@ -108,7 +108,12 @@ Written to `BepInEx/config/valheim.server_authority.cfg` on first run.
 | `Performance.MaxObjectsCreatedPerFrame` | `100` | Lower if the server stutters, raise if players outrun object loading. |
 | `Performance.ZoneEvictionsPerTick` | `0` (auto) | How many expired zones may unload per tick. |
 | `Performance.ServerFrameRate` | `60` | Valheim hardcodes 30. See [Responsiveness](#responsiveness). |
-| `Performance.ZdoSendRate` | `20` | How often object updates flush to each client, in Hz. |
+| `Performance.ZdoSendRate` | `20` | How many times per second each player is sent the objects that changed around them. See [Object updates](#object-updates). |
+| `Performance.FairZdoSending` | `true` | Serve every player at `ZdoSendRate` however many are online. Off restores vanilla's one player per frame, whose rate falls as players join. |
+| `Performance.FollowLivePlayerPosition` | `true` | Load, simulate and send around each player's character as it is now, not where the client last reported it up to two seconds ago. |
+| `Performance.ZdoSendWindowMaxKiB` | `64` | Cap on object data in flight to one player. The window is sized per player from ping and Steam rate. `10` is vanilla. |
+| `Performance.SteamSendRateKiB` | `384` | The fixed rate Steam paces each player's connection at. `0` keeps vanilla's 150. Needs upload for every player at once. |
+| `Performance.ClearTeleportGhosts` | `true` | Fixes players seeing a frozen copy of someone at the portal they just used. |
 | `Vehicles.KeepShipOwnedByDriver` | `false` | Fallback only. On hands a steered boat back to its driver; the server owning it is the intended state. |
 | `Vehicles.KeepVehiclesOwnedByUser` | `true` | Same for mounts and carts. Leave this on. |
 | `Vehicles.HoldHullsUntilWaterLoads` | `true` | Leave this on. Off reproduces moored boats jumping when their physics activates. |
@@ -128,6 +133,10 @@ Written to `BepInEx/config/valheim.server_authority.cfg` on first run.
 | `Debug.ForceEnvironment` | empty | Debug tools build only. Pin the weather to one environment, such as `ThunderStorm`. Must be set identically everywhere or it *creates* a desync. |
 | `Debug.LogOwnershipChanges` | `false` | Debug tools build only. Logs every takeover and handback. Noisy. |
 | `Debug.StatusIntervalSeconds` | `0` | Periodic "simulating N sectors" line. Start with `60`. |
+| `Debug.PerformanceReportSeconds` | `600` | One line per interval with the server's average frame rate, lowest ten second average, worst frame, and how many zones, objects and creatures it holds. Leave on. |
+| `Debug.SlowFrameRateWarning` | `20` | Warn when the server averages fewer frames per second than this over ten seconds. The warning lists the creatures nearest each player and the most common instantiated objects, so the cause of lag can be read afterwards. At most one a minute. |
+| `Debug.HitchWarningMilliseconds` | `500` | Give the same warning when a single frame takes longer than this. |
+| `Debug.NetworkSaturationWarning` | `50` | Warn when at least this share of the sends to a player fell behind or were held back over ten seconds. See [Reading the network report](#reading-the-network-report). |
 | `Debug.LogNearestWaterOnJoin` | `false` | Debug tools build only. Logs where the nearest sailable water is, for boat testing. |
 | `Debug.EnableSpawnRequests` | `false` | Debug tools build only. Testing aid, see below. Leave off outside testing. |
 | `ModValidation.Enabled` | `false` | Require clients to run the same mods as the server. See below. |
@@ -305,7 +314,8 @@ A plain build leaves out every debug option and testing tool, and is the one to 
 `Debug.LogOwnershipChanges`, `Debug.LogShipState`, `Debug.LogNearestWaterOnJoin`,
 `Debug.ForceEnvironment` and `Debug.EnableSpawnRequests` with its spawn requests. Their settings are
 not even written to the config file. The diagnostics meant to be running when something goes wrong,
-`Debug.LogShipDamage`, `Debug.WaveSyncIntervalSeconds` and `Debug.StatusIntervalSeconds`, stay in.
+`Debug.LogShipDamage`, `Debug.WaveSyncIntervalSeconds`, `Debug.StatusIntervalSeconds` and the
+performance and network reports and warnings, stay in.
 
 For testing, build with them:
 
@@ -989,8 +999,9 @@ server never simulates anything.
 - **The server runs at 30 FPS.** `targetFrameRate` is hardcoded in `GraphicsSettingsManager` and
   applied in `PresentManager`. That sets the floor on how fast the server notices anything at all:
   an interaction waits up to a full 33ms frame before it is even read.
-- **Object updates flush at 20Hz.** So objects the server spawns, such as the items a picked bush
-  drops, wait up to another 50ms to reach the client.
+- **Object updates go out at most 20 times a second**, and fewer once several players are online.
+  See [Object updates](#object-updates). So objects the server spawns, such as the items a picked
+  bush drops, wait up to another 50ms to reach the client.
 
 Together that is roughly 100ms with no network involved, which is enough to feel. Measured on a
 loopback server, picking went from noticeably laggy to fine by raising `ServerFrameRate` to 60
@@ -998,12 +1009,84 @@ alone. The cost is CPU: one player at simulation distance 2 took a Valheim serve
 of a single core. That is nothing on a desktop and may matter on a small VPS, so the knob is there
 to turn back down.
 
-`ZdoSendRate` is left at vanilla's 20 by default because raising it costs bandwidth for every
-client. Raise it if server-spawned objects appear later than you would like.
-
 None of this removes the round trip, it only shortens it. A round trip to the owner is inherent to
-moving ownership, which is exactly why `Contested` mode gives a lone player their surroundings back:
-solo, they pay nothing at all. `Always` mode is the worst case for latency by design.
+the server owning everything, and it is accepted by design: every player gets the same latency,
+instead of one player getting none and everyone else getting that player's connection.
+
+### Object updates
+
+Every creature, item and piece is a ZDO, and whenever anything about one changes, the whole ZDO is
+sent again to every player near it. A moving creature costs 150 to 250 bytes per update, a tree or
+a building piece 60 to 90. Vanilla limits that stream in three places, and all three were written
+for a server that only relays what clients simulate.
+
+- **One player per frame.** Since 0.216.8 `ZDOMan.SendZDOToPeers2` serves one player per server
+  frame in turn, so each player's update rate falls as players join. At 60 FPS that is about 20 a
+  second for one or two players, 15 for three, 10 for five, 6.7 for eight and 5.5 for ten.
+  `FairZdoSending` serves every player at `ZdoSendRate` instead, spread evenly over the frames.
+- **10 KiB in flight.** `ZDOMan.SendZDOs` sends nothing while more than 10 KiB is queued for a
+  player, and that count includes data Steam has sent but the player has not yet acknowledged. So
+  a player can receive at most 10 KiB per round trip. `ZdoSendWindowMaxKiB` replaces it with a
+  window sized for each player: their Steam send rate over 1.25 round trips plus two send
+  intervals, which keeps Steam busy between sends without letting a long queue build.
+- **150 KiB/s per connection.** `ZSteamSocket` sets Steam's minimum and maximum send rate to the
+  same 153600 bytes. Steam does not estimate bandwidth: Valve's own header says the two should be
+  equal "to manually configure a specific send rate", and the library fixes the rate at connect time
+  as the larger of the minimum and about 4.4 KB per round trip. So raising only the maximum, as
+  several networking mods do, changes nothing over the internet. `SteamSendRateKiB` sets both.
+
+The two last settings only help together, since vanilla's window keeps a player below 150 KiB/s
+anyway. Measured on the loopback test server with 30 tame wolves hunting deer around one player:
+
+| | Vanilla | This mod |
+| --- | --- | --- |
+| Sends per second | 19.5, every one full | 19.7 |
+| Delivered | 135 KiB/s, Steam pinned at 141 | 262 KiB/s at a 384 KiB/s rate |
+| Objects waiting for a later send | up to 2,231 | up to 107 |
+
+The cost is upload: at peak the server may send `SteamSendRateKiB` to every player at once, so 384
+KiB/s for eight players is 25 Mbit/s. Lower it if the server's upload is smaller, and watch the
+network report's Steam queue.
+
+`FollowLivePlayerPosition` fixes a quieter lag. The server decides which zones to build, what to
+simulate and what to send around each player's reference position, and a client only reports that
+every two seconds. The server's picture of a sailing player trails by 20 metres, and after a portal
+jump the destination does not start streaming until the next report. The player's own character is
+already on the server and updated many times a second, so the mod reads that instead.
+
+`ClearTeleportGhosts` fixes a vanilla ordering bug. When an object crosses into another zone,
+`ZDO.InternalSetPosition` files it under the new zone and asks every player whether it has left
+their area before it stores the new position, so the check tests the old one. Players standing at
+a portal are never told that the person who used it has gone, and keep a frozen copy of them there.
+The mod repeats the check once the position is stored, and logs each portal jump it cleans up.
+
+### Reading the network report
+
+`Debug.PerformanceReportSeconds` also prints one line per player, for example:
+
+```
+Test Maiden: 19.7 sends/s (19.3 with data), 1205 objects/s, 262.5 KiB/s, window up to 38 KiB;
+51% of sends full, 3% fell behind, 2% held back by a full queue, backlog up to 107 object(s);
+ping 42 ms (worst 95), delivery 100.0%, Steam queue up to 48 ms, Steam rate 384 KiB/s,
+Steam out 245.3 KiB/s; send work 0.53 ms per send (worst 3.5 ms).
+Most sent: 43% Deer, 34% Wolf, 6% Neck, ...
+```
+
+- **sends/s** should sit near `ZdoSendRate`. Much lower means the server's frame rate is the limit.
+- **full** sends ran out of window with changes left over; those wait for the next send, 50ms
+  later, which is harmless on its own. **fell behind** means more was left over than the send
+  carried, so changes pile up and creatures start to stutter for that player. **held back** means
+  the window was still full from earlier sends.
+- **Steam queue** is how long new data waits behind data already queued. If it stays near a
+  hundred milliseconds or more while the player falls behind, the Steam rate is the limit, which
+  `SteamSendRateKiB` raises, provided the upload allows it.
+- **send work** is the server CPU spent choosing and packing updates, most of it scanning every
+  object around the player. It grows with the size of bases, and with the send rate.
+- **Most sent** is the share of bytes by prefab, and tells a tame pen, a raid or a base full of
+  changing objects apart.
+
+`Debug.NetworkSaturationWarning` logs the same line as a warning, at most once a minute, when a
+player falls behind or is held back in at least that share of sends over ten seconds.
 
 ## What the server cannot do
 

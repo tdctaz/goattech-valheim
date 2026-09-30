@@ -54,6 +54,9 @@
     <Reference Include="MagicaClothV2" Private="false">
       <HintPath>$(ValheimManaged)/MagicaClothV2.dll</HintPath>
     </Reference>
+    <Reference Include="com.rlabrecque.steamworks.net" Private="false">
+      <HintPath>$(ValheimManaged)/com.rlabrecque.steamworks.net.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
   <!--
