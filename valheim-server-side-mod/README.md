@@ -1468,6 +1468,55 @@ An eighth counts a player's work for whoever owns what they worked on:
    `MineRock.RPC_Hit`, `MineRock5.DamageArea`, `Character.RPC_Damage` and `Tameable.Tame`, so
    re-read those after a game update.
 
+A ninth moves the server's copy of a player instead of the player:
+
+9. **Launches that only move the server's copy.** `Aoe.OnHit` calls `Character.ForceJump` on every
+   character it hits when `m_launchCharacters` is set, which only `Fader_MeteorSmash_AOE` does
+   (35 to 45, blended halfway towards straight up, radius 5 m). It is not one of the fight's
+   attacks; the meteor rain spawns `Fader_WallOfFire_AOE`. It is the Fader's arrival:
+   `offeraltar_fader` lists it in `m_spawnBossDoneffects`, and `OfferingBowl.DelayedSpawnBoss`
+   creates it and calls `Setup` with the new Fader as owner, once per summon, 25 s after the
+   offering, where the Fader lands, 14 to 20 m from the offering point. `ForceJump` sets the
+   rigidbody's velocity directly and has no RPC, so it only works on the machine that owns the
+   character. In vanilla the altar's owner is a client, whose own player is thrown and usually
+   takes fall damage on landing. Here the altar's location proxy, and so the summon and its AoE,
+   are the server's, so the launch landed on the server's copy of each player, whose position the
+   player's client overwrites: nobody was thrown and nobody took the fall. The rest of `ForceJump`
+   still ran on the copy. It broadcast the jump animation trigger, and `Player.OnJump` sent
+   `UseStamina` to the real client, so the player lost a jump's worth of stamina standing still,
+   and counted `Jumps` in the server's own profile.
+
+   `PlayerLaunch.cs` handles it from a prefix on `Character.ForceJump`. On the server, a call on a
+   `Player` the server does not own is sent to that player's client with the velocity and the
+   effects flag vanilla passed, and skipped on the copy, so the copy gets no velocity, no trigger,
+   no stamina message and no stat. The client checks the target is still its own character and
+   calls `ForceJump` on it, which is exactly what vanilla's owner would run, so the stamina,
+   animation, `Jumps` stat and the fall damage on landing all happen there. This goes further than
+   vanilla multiplayer, where only the altar owner's player is thrown and everyone else's copy got
+   what the server's copy got here: now every player within the 5 m is thrown. To see it, stand
+   within 5 m of where the Fader lands when it is summoned. The velocity is the one vanilla
+   computed on the server, from the hit point towards the AoE's centre and scaled by distance.
+   Recomputing the direction on the client from its own position was rejected: which players are
+   hit, how hard, and how much damage they take are all judged from the server's view of them, and
+   the launch should agree with those. The launch is sent before the AoE's damage message, in the
+   order vanilla applies them. Every other `ForceJump` caller leaves players the server does not
+   own alone: `Character.Jump` runs where the character is controlled, `Catapult` launches only
+   the characters each machine owns, and `GrapplingPoint` runs on the grappling player's own
+   client, so none of them changes. The one exception to watch is `CharacterAnimEvent.Jump`, which
+   calls `Character.Jump(force: true)` from an animation event on every machine animating the
+   character. Today the only clip with that event is the Tick's "Bite Attack", and a Tick is not a
+   player, but a `Jump` event on a player clip after a game update would make the server's animator
+   of each player's copy forward a second jump, so re-read `ForceJump`'s callers and the animation
+   events then. Each forwarded launch is logged, and so is one dropped because the client has gone.
+
+   The other local-only push in `Aoe.OnHit`, `m_knockBackForce` through `Character.ApplyPushback`,
+   is not the same shape. Three AoEs set it, `staff_thunderblood_aoe` (25) and
+   `fx_UpgradeStation_Success` and `_Fail` (8 and 13), and all three are spawned by a client, so no
+   server-owned AoE pushes a player that way. The reverse does happen and is not handled here: the
+   thunderblood staff's knockback and the upgrade station's success and failure bursts push
+   server-owned creatures, such as tames standing nearby, by writing to the client's own copy of
+   them, and the push is lost.
+
 To find more after a game update, scan the decompiled source for `Player.m_localPlayer`
 dereferences inside `RPC_*` methods that have no null guard, then check how each RPC is invoked:
 ones sent to a specific peer are client-only and safe, while owner-targeted and `Everybody` ones
@@ -1529,6 +1578,7 @@ src/ServerAuthority/
   TriggerAoeSetup.cs      Carries a creature's trigger AoE setup to every client's copy of it
   CookingCollect.cs       Collects from cooking stations on the server, crediting the collecting player
   StatCredit.cs           Counts a stat, item craft or skill gain for one player, sent by the server
+  PlayerLaunch.cs         Sends a launch aimed at the server's copy of a player to their client
   SummonSkill.cs          Sends a summon's skill gain to its summoner's own client
   EarnedStats.cs          Sends chopping, mining, hit and taming stats to the player who earned them
   RpcTakeover.cs          Replaces a vanilla RPC handler on the server with one that wraps or redoes it

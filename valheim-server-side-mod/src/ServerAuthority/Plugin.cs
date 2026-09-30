@@ -122,6 +122,7 @@ namespace ServerAuthority
             Plugin.EvaluateSession();
             KillCredit.Register();
             StatCredit.Register();
+            PlayerLaunch.Register();
 
             if (__instance.IsServer())
             {
