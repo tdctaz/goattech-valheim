@@ -1,0 +1,16 @@
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+valheim-server-side-mod/tools/package/*.txt text eol=crlf
+valheim-server-side-mod/tools/package/*.cfg text eol=crlf
+release/client/*.txt text eol=crlf
+release/server/*.txt text eol=crlf
+release/server/*.cfg text eol=crlf
+
+*.dll binary
+*.zip binary
+*.png binary
+*.jpg binary
