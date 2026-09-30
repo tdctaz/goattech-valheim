@@ -42,6 +42,9 @@ Some things still belong to clients, and always will:
 - **Player characters.** Never reassigned, at all. A body simulated by the server rubber-bands.
 - **Mounts and carts.** Continuous input, so a server-owned animal answers a full round trip late.
   The user holds a lease on it; once they let go it reverts to the server.
+- **A fish on the line.** Its escapes and its fight run on whoever owns it, so the fisher holds a
+  lease on it while one of their floats names it as the catch, and it reverts to the server once
+  it is caught, lost or the line breaks.
 
   **Ships are no longer in this list.** The server owns a boat even while somebody is steering it,
   because that is the only way every passenger gets the same hull physics rather than whatever the
@@ -1106,6 +1109,28 @@ have the local state vanilla quietly assumes an owner has. Seven kinds, nearly a
      nobody is at the helm and takes the boat back mid-voyage. The fix is to ask the replicated
      character positions instead, which is what `Sadle` already does and why mounts were never
      affected.
+   - A hooked fish. `Fish.OnHooked` claims the fish for the fisher and keeps the hook in a local
+     field, `m_fishingFloat`, which drives the fish's escapes and its fight; the `s_hooked` int it
+     also writes is only read for a splash effect. Fish are persistent, so the policy took a
+     freshly hooked fish back after the 3 s grace for a peer's claim, 4 to 6 s into the fight. The
+     server then ran it as an unhooked fish: no escapes, wandering its own waypoints, and fleeing
+     only a player whose noise reached it from beyond half its avoid range, which a fisher
+     standing still does not make, while the float still dragged it. The fisher's copy stopped
+     updating, so `IsEscaping` froze, either halving the reel speed and charging escape stamina for
+     the rest of the fight or never escaping at all.
+
+     `HookedFish.cs` keeps a hooked fish with its fisher through the same lease mounts and carts
+     take, renewed on every ownership pass. A fish counts as hooked while a fishing float the server
+     holds names it as its catch in `s_sessionCatchID`, a key the float's owner writes and clears.
+     That, and not `s_hooked`, is the test, because vanilla leaves `s_hooked` at 1 when a fish is
+     lost for lack of stamina. Only objects whose prefab has a `Fish` component are leased, so a
+     float naming anything else cannot touch another lease. A hooked fish can still nibble and be
+     hooked by a second player's float, since it keeps picking waypoints, so when two floats name
+     one fish the lease stays with its current owner if that is one of the fishers, or otherwise
+     with the lower peer id. The lease ends at the next pass after a catch, a loss, a broken line,
+     the float going away or the fisher disconnecting, so within about 2 s, and lapses on its own
+     after 6 s without renewal. Taking and releasing a fish are logged, with the fisher's name
+     captured while they are still connected, and only when the fisher holding it changes.
 3. **Nothing. The boat failure was this mod's own bug**, and it is worth recording because the
    first two explanations written here were both wrong. A server-owned hull sank, tumbled and
    exploded, which was blamed first on the server having no water volumes and then on an
@@ -1605,7 +1630,8 @@ src/ServerAuthority/
   Plugin.cs               Entry point, session detection, game version check
   ModConfig.cs            Configuration
   OwnershipPolicy.cs      Applies the rules to live ZDOs
-  OwnershipLeases.cs      Short-lived pins that keep an object with one client (ships)
+  OwnershipLeases.cs      Short-lived pins that keep an object with one client (mounts, carts, fish)
+  HookedFish.cs           Leases a hooked fish to its fisher for as long as it is on the line
   SimulationAnchors.cs    Connected players, which replace the server's unused reference position
   ServerViewpoint.cs      Where a headless server stands when the game asks a question about "here"
   WaveField.cs            Deterministic wind and the water clock, so every machine computes one sea
