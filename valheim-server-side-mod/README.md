@@ -1349,10 +1349,49 @@ A fifth assumes the owner is the victim's machine:
    The first setup of each prefab is logged on both ends, and so is a replay whose attacker the
    client does not have.
 
+A sixth credits the owner with work a player did:
+
+6. **Crafts credited to the station's owner.** Taking a finished item out of a cooking station
+   runs `OnInteract` on the player's own client, which raises their cooking skill, rolls the bonus
+   yield and counts the cook or burnt stat there, then sends `RPC_RemoveDoneItem` with the amount
+   to the station's owner, now the server. The owner calls `SpawnItem` once per item and only then
+   empties the slot. On the Frost Foundry, the only station with `m_recordCrafter` set, `SpawnItem`
+   stamps the item with `Player.m_localPlayer` as its crafter, which on the server throws after the
+   item already exists and before the slot is emptied. Every collect produced one more copy of the
+   Deep North weapon, armour or key while the foundry kept its finished item, so they could be
+   duplicated without end, and none had a crafter. The foundry has no skill, so it never rolls a
+   bonus and nothing was lost there. The other stations' `SpawnItem` goes on to count the item in
+   `Game.instance.GetPlayerProfile()`, which on the server is the server's own profile, and the
+   foundry's threw before reaching that line, so its crafts were counted nowhere. No cooked food or
+   foundry craft reached any player's stats, and AllFoodCooked, AllWeaponCraft and AllItemCraft
+   could never unlock.
+
+   `CookingCollect.cs` handles the collect on the server with the collector known exactly. A
+   postfix on `CookingStation.Awake` replaces the station's registered `RPC_RemoveDoneItem` handler
+   with one that does the same work, spawning every item before it empties the slot, and emptying
+   it even if a spawn throws, so a future fault there costs items rather than duplicating them. It
+   copies `RPC_RemoveDoneItem` and `SpawnItem`, so re-read both after a game update; if the handler
+   it expects is not registered, the server logs a warning once and leaves vanilla's code in place.
+   The RPC's sender is the collecting peer, whose character ZDO gives the player id and name for
+   the crafter, and the craft stat goes to that peer through `StatCredit.cs`. No RPC method is
+   patched: the delegate `DynamicInvoke` reaches is an ordinary compiled method, so the hazard in
+   [Patching RPC methods can kill the server](#patching-rpc-methods-can-kill-the-server) does not
+   apply. Finding the collector as the player closest to the position the client sends was rejected,
+   since two players at one station are told apart reliably only by who sent the request. What the
+   collecting client does for itself stays with it. `StatCredit` carries a stat or an item craft to
+   one player's own profile, and is meant for the other stats the server now earns on players'
+   behalf. `Smelter`, which also runs the kiln, windmill, spinning wheel and refinery, and
+   `Fermenter` spawn their output on the owner without touching a local player or profile, so they
+   needed nothing. Every foundry collect is logged with its item and collector, and so is any
+   collect whose collector cannot be found.
+
 To find more after a game update, scan the decompiled source for `Player.m_localPlayer`
 dereferences inside `RPC_*` methods that have no null guard, then check how each RPC is invoked:
 ones sent to a specific peer are client-only and safe, while owner-targeted and `Everybody` ones
-now execute on the server.
+now execute on the server. Follow the ordinary methods those RPCs and other owner-run code call as
+well, since the Frost Foundry's dereference sat in `SpawnItem`, not in the RPC. And look for writes
+to `Game.instance.GetPlayerProfile()` or `Game.instance.IncrementPlayerStat` in owner-run code:
+they throw nothing and land in the server's own profile.
 
 ## Game updates
 
@@ -1401,6 +1440,8 @@ src/ServerAuthority/
   WaterQueries.cs         Initialises the layer mask Floating's water lookups depend on
   KillCredit.cs           Sends a kill's defeat key and last hit to the players who earned them
   TriggerAoeSetup.cs      Carries a creature's trigger AoE setup to every client's copy of it
+  CookingCollect.cs       Collects from cooking stations on the server, crediting the collecting player
+  StatCredit.cs           Counts a stat or item craft in one player's own profile, sent by the server
   Integrity/              Mod manifest, character storage, validation, and both ends of the protocol
   Patches/                One file per subsystem, each explaining what vanilla does and why it changes
 tools/PatchCheck/              Resolves every patch target against the game assembly

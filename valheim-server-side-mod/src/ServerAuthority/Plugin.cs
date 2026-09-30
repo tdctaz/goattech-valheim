@@ -116,8 +116,10 @@ namespace ServerAuthority
             Patches.Ship_CustomFixedUpdate_Diagnostic.Forget();
 #endif
             TriggerAoeSetup.Reset();
+            CookingCollect.Reset();
             Plugin.EvaluateSession();
             KillCredit.Register();
+            StatCredit.Register();
 
             if (__instance.IsServer())
             {
