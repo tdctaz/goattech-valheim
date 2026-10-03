@@ -169,6 +169,17 @@ namespace ValheimCreatures.Patches
         }
     }
 
+    [HarmonyPatch(typeof(Game), nameof(Game.GetDifficultyDamageScalePlayer))]
+    internal static class Game_GetDifficultyDamageScalePlayer_Patch
+    {
+        private static bool Prefix(Game __instance, Vector3 pos, ref float __result)
+        {
+            float perPlayer = ConfigSync.Current.DamagePerPlayer;
+            __result = perPlayer <= 0f ? 1f : 1f + (__instance.GetPlayerDifficulty(pos) - 1) * perPlayer;
+            return false;
+        }
+    }
+
     [HarmonyPatch(typeof(Character), nameof(Character.OnDeath))]
     internal static class Character_OnDeath_Patch
     {

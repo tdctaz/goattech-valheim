@@ -71,6 +71,7 @@ Server and every client.
    - Splitting: drops nothing on death and splits into two full bosses without stars
    - Shielded: half damage from magic, a quarter off damage from arrows and bolts
  - Raids come in waves, scaled by players online and base comfort, and end only when cleared
+ - Creatures hit as hard however many players are near them; vanilla adds 4% per player, and its extra health per player stays
  - Stars above two get their own size and crature tint
 
 ### Valheim Server Tool

@@ -235,6 +235,16 @@ Magic is anything using Elemental or Blood Magic, arrows anything using Bows or 
 The Frozen King gets no stars. It fights in three phases, each its own boss, so stars per phase
 would change mid fight and a white one would split. `BossColors.StarlessBosses` lists such bosses.
 
+## Players nearby
+
+Vanilla makes creatures tougher as more players gather. Each player within 100m of whoever is hit,
+counted on the flat and at most five, adds 30% to how much damage a creature can take and 4% to the
+damage it deals. The mod keeps the first and drops the second, so a creature hits just as hard
+however many players are near. `Difficulty.DamagePerPlayer` brings it back, 0.04 being vanilla.
+
+Vanilla adds the 4% whenever anything that is not a player hits something, so tamed creatures lose
+it too, both when they hit an enemy and when they are hit.
+
 ## HUD
 
 Stars above two, and every colored star, are drawn by the mod in place of vanilla's stars, centered
@@ -284,12 +294,13 @@ connected to a server; a client's own copy applies in single player and when hos
 | `BossCyan.Distance` | `30` | Meters from the boss. |
 | `BossBlue.ArrowReduction` | `0.25` | |
 | `Raids.Waves` | `true` | Dedicated server only. `false` is vanilla raids. |
-| `Raids.WaveInterval` | `180` | Seconds from a wave's death to the next wave, counted while a player is in the area. |
+| `Raids.WaveInterval` | `20` | Seconds from a wave's death to the next wave, counted while a player is in the area. |
 | `Raids.MaxWaves` | `8` | |
 | `Raids.PlayerWavesMax` | `5` | Most waves from players in the area beyond the first. |
 | `Raids.ComfortPerWave` | `5` | Comfort per extra wave; 0 turns it off. |
 | `Raids.TimeoutMinutes` | `120` | |
 | `Raids.SpawnDistance` | `40` | Meters from a player in the area, reaching out to twice this to get clear of a base. |
+| `Difficulty.DamagePerPlayer` | `0` | Extra creature damage per player nearby beyond the first. 0.04 is vanilla. |
 | `Looks.ScalePerStar` | `0.05` | Local. Size added per star past two. |
 | `Looks.SaturationPerStar` | `0.1` | Local. |
 | `Looks.ValuePerStar` | `-0.05` | Local. Brightness; negative is darker. |

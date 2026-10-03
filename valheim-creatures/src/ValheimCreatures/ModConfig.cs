@@ -70,6 +70,8 @@ namespace ValheimCreatures
         internal static ConfigEntry<float> RaidTimeoutMinutes;
         internal static ConfigEntry<float> RaidSpawnDistance;
 
+        internal static ConfigEntry<float> DamagePerPlayer;
+
 #if DEBUG_TOOLS
         internal static ConfigEntry<bool> LogFactions;
         internal static ConfigEntry<bool> EnableTestCommands;
@@ -201,7 +203,7 @@ namespace ValheimCreatures
                 "Dedicated server only. Run raids as waves: a raid keeps going until all its waves are dead, never " +
                 "runs away on a timer, and several bases can be raided at once, one raid per base. Only one wave is " +
                 "alive at a time across the whole world. Off is vanilla.");
-            RaidWaveInterval = config.Bind("Raids", "WaveInterval", 180f,
+            RaidWaveInterval = config.Bind("Raids", "WaveInterval", 20f,
                 new ConfigDescription(
                     "Seconds from the moment a wave is dead until the raid's next wave. The clock only runs while a " +
                     "player is inside the raid's area. A wave also waits while any other raid has a wave alive.",
@@ -230,6 +232,14 @@ namespace ValheimCreatures
                     "How far from a player inside the raid area each group of a wave appears. Groups never appear " +
                     "inside a player base or under cover, and the search reaches out to twice this to get clear of one.",
                     new AcceptableValueRange<float>(10f, 90f)));
+
+            DamagePerPlayer = config.Bind("Difficulty", "DamagePerPlayer", 0f,
+                new ConfigDescription(
+                    "Extra damage dealt by creatures for each player beyond the first within 100m of what they hit, " +
+                    "counting at most five players. Vanilla is 0.04, +4% per player. 0 keeps their damage the same " +
+                    "however many players are near. Tamed creatures count as creatures. The vanilla player scaling " +
+                    "of how much damage creatures take is left as it is.",
+                    new AcceptableValueRange<float>(0f, 1f)));
 
             ScalePerStar = config.Bind("Looks", "ScalePerStar", 0.05f,
                 new ConfigDescription(

@@ -47,6 +47,7 @@ namespace ValheimCreatures
         internal int RaidComfortPerWave;
         internal float RaidTimeoutMinutes;
         internal float RaidSpawnDistance;
+        internal float DamagePerPlayer = 0.04f;
 
         internal static readonly Balance Vanilla = new Balance();
 
@@ -93,6 +94,7 @@ namespace ValheimCreatures
                 RaidComfortPerWave = ModConfig.RaidComfortPerWave.Value,
                 RaidTimeoutMinutes = ModConfig.RaidTimeoutMinutes.Value,
                 RaidSpawnDistance = ModConfig.RaidSpawnDistance.Value,
+                DamagePerPlayer = ModConfig.DamagePerPlayer.Value,
             };
 
             for (int i = 0; i < StarColors.Count; i++)
@@ -151,6 +153,7 @@ namespace ValheimCreatures
             package.Write(RaidComfortPerWave);
             package.Write(RaidTimeoutMinutes);
             package.Write(RaidSpawnDistance);
+            package.Write(DamagePerPlayer);
         }
 
         internal static Balance Read(ZPackage package)
@@ -204,13 +207,15 @@ namespace ValheimCreatures
             balance.RaidComfortPerWave = package.ReadInt();
             balance.RaidTimeoutMinutes = package.ReadSingle();
             balance.RaidSpawnDistance = package.ReadSingle();
+            balance.DamagePerPlayer = package.ReadSingle();
             return balance;
         }
 
         public override string ToString()
         {
             return $"max stars {MaxStars}, before trophy {MaxStarsBeforeTrophy}, without boss {MaxStarsWithoutBoss}, " +
-                   $"level up chance {LevelUpChance}%, boss defeated x{BossDefeatedChanceMultiplier}";
+                   $"level up chance {LevelUpChance}%, boss defeated x{BossDefeatedChanceMultiplier}, " +
+                   $"damage per extra player {DamagePerPlayer}";
         }
     }
 }
