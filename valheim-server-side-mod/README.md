@@ -316,11 +316,12 @@ and world modifiers the game counts as cheats. Single player and player-hosted g
 because the client only learns it is on a Server Authority server from the server's answer to its
 manifest.
 
-The same check decides a few other things, which now behave as in an unmodded game. A devcommand
-first asks for `confirmcheats`, and confirming marks the character as having used devcommands,
-which `RejectCheatedProfiles` then refuses. Before, the modded flag made the game treat everyone
-as having cheated already, so it never asked. The maximum comfort, building height and days
-survived counters also move to the achievement stats, so they start from zero.
+Cheat commands are unaffected. A client on a dedicated server cannot run them at all, because
+`Terminal.IsCheatsEnabled` requires `ZNet.IsServer`. An admin's command is sent to the server, which
+checks `adminlist.txt`, logs `Remote admin '<id>' executed command`, and runs it in its own console,
+where the flag is never lowered. Items spawned that way still carry the game's cheated mark, which
+`RejectCheatedItems` refuses. On the client the same check also picks the stats slot for the maximum
+comfort, building height and days survived counters, so those start from zero.
 
 Progress made before this is not counted, because the game never recorded it. Each player's log
 says at spawn whether achievements are allowed in the session, and if not, why. A later respawn

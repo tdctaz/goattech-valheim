@@ -38,8 +38,8 @@ runs the same mods at the same version and hands characters to the server.
 ##### Fixed Bugs
  - No achievements on the server: BepInEx marks the game as modded and Valheim treats that as
    cheating. Achievements now count on a Server Authority server. Progress from before is not
-   counted, so earlier achievements have to be earned again, and devcommands now ask for
-   `confirmcheats` as in an unmodded game
+   counted, so earlier achievements have to be earned again. Cheating is not opened up: on the
+   server only admins can run cheat commands, the server runs them, and they are logged
  - Boat physics is damaging the boat when the boat/ship is sitting on the border of two zones and only one of the zones is loaded. Resulting it dropping to the bottom and taking damage
 
 ### GoatTech Rebalanced
