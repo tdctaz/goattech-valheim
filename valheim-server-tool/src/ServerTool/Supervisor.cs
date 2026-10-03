@@ -234,6 +234,7 @@ public sealed class Supervisor
 
         int code = server.ExitCode;
         TimeSpan ranFor = now - server.StartedAt;
+        Backups.SaveModLog(_config, server);
         bool expected = _state == State.Stopping || _userInterrupted;
         if (_userInterrupted && _state != State.Stopping)
         {

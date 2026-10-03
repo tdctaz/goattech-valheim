@@ -111,6 +111,7 @@ world name. The tool checks it before starting instead of letting the server qui
 backups/
   servertool.log                      what the tool did and when
   logs/server-<time>.log              the server's full output, one file per run
+  logs/bepinex-<time>.log             the mods' own log for the same run, copied when it stops
   logs/steamcmd-<time>.log            SteamCMD's output from each update
   crashes/<time>-exit<code>/
     summary.txt                       exceptions, fatal signals and the last 40 lines; read first
@@ -120,6 +121,11 @@ backups/
     unity-crash/                      Unity's crash report, when there is one (Windows)
   worlds/<world>-<time>.zip           the world, plus characters_serverauthority
 ```
+
+The mods write to `BepInEx/LogOutput.log`, which on Windows is the only place their lines go, and
+BepInEx empties that file every time the server starts. So whenever the server stops, the tool
+copies it to `logs/bepinex-<time>.log` with the same time as that run's server log, before any
+restart. A running server's mod log is only in `BepInEx/LogOutput.log` until it stops.
 
 Any exit the tool did not ask for counts as a crash. If the server dies within a minute of starting
 three times running, the tool stops restarting it, since that is a startup failure such as a bad

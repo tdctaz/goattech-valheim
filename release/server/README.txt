@@ -107,6 +107,9 @@ Everything the tool keeps goes into servertool/backups:
 
     servertool.log                  what the tool did and when
     logs/server-<time>.log          the server's output, one file per run
+    logs/bepinex-<time>.log         the mods' own log for the same run,
+                                    with the performance reports; copied
+                                    when the server stops
     crashes/<time>-exit<code>/      logs and configs from each crash;
                                     summary.txt is the one to read first
     logs/steamcmd-<time>.log        SteamCMD's output from each update

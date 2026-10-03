@@ -71,7 +71,7 @@ public static class Backups
         Directory.CreateDirectory(dir);
 
         TryCopy(server.LogPath, Path.Combine(dir, "server.log"));
-        TryCopy(Path.Combine(config.ServerDir, "BepInEx", "LogOutput.log"), Path.Combine(dir, "BepInEx-LogOutput.log"));
+        TryCopy(ModLogPath(config), Path.Combine(dir, "BepInEx-LogOutput.log"));
 
         string configDir = Path.Combine(config.ServerDir, "BepInEx", "config");
         if (Directory.Exists(configDir))
@@ -87,11 +87,26 @@ public static class Backups
         return dir;
     }
 
+    public static void SaveModLog(ToolConfig config, ServerProcess server)
+    {
+        string source = ModLogPath(config);
+        if (!File.Exists(source) || File.GetLastWriteTimeUtc(source) < server.StartedAt.ToUniversalTime())
+        {
+            return;
+        }
+
+        string stamp = Path.GetFileNameWithoutExtension(server.LogPath).Replace("server-", "");
+        TryCopy(source, Path.Combine(LogsDir(config), $"bepinex-{stamp}.log"));
+    }
+
     public static void PruneServerLogs(ToolConfig config)
     {
         Prune(LogsDir(config), "server-*.log", config.ServerLogsToKeep);
+        Prune(LogsDir(config), "bepinex-*.log", config.ServerLogsToKeep);
         Prune(LogsDir(config), "steamcmd-*.log", config.ServerLogsToKeep);
     }
+
+    private static string ModLogPath(ToolConfig config) => Path.Combine(config.ServerDir, "BepInEx", "LogOutput.log");
 
     private static void WriteSummary(string logPath, string summaryPath, int exitCode, TimeSpan ranFor)
     {
@@ -161,7 +176,7 @@ public static class Backups
             using FileStream target = new(to, FileMode.Create, FileAccess.Write);
             source.CopyTo(target);
         }
-        catch (IOException e)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             Log.Warn($"Could not copy {from}: {e.Message}");
         }
