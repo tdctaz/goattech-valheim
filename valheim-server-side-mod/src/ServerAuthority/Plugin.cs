@@ -126,6 +126,7 @@ namespace ServerAuthority
             RemotePush.Reset();
             Patches.ArcheryTarget_OnProjectileHit_Patch.Reset();
             SummonSkill.Reset();
+            AchievementGate.Reset();
             Plugin.EvaluateSession();
             KillCredit.Register();
             StatCredit.Register();
@@ -160,6 +161,7 @@ namespace ServerAuthority
             CreaturesRaids.Reset();
             ServerControl.Reset();
             ServerPerformance.Reset();
+            AchievementGate.Reset();
             Patches.ZDOMan_SendZDOToPeers2_Patch.Reset();
             Patches.EnvMan_UpdateEnvironment_Patch.Forget();
             Patches.ShipEffects_CustomLateUpdate_Patch.Forget();

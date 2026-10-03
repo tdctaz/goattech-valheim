@@ -299,6 +299,33 @@ A crash, a kill, or a dropped connection still rolls a character back to its las
 `SaveIntervalSeconds` old, while the world keeps whatever was put into chests since. That can
 duplicate items. Vanilla has the same exposure, bounded by its much longer world save interval.
 
+## Achievements
+
+Vanilla gives no achievements at all to a game with BepInEx installed. `Achievements.IsCheatedAtAll`
+counts `Game.isModded` as cheating, and the BepInExPack Valheim loader sets that flag on every
+modded install, whatever the mods do. While the game counts as cheated, `PlayerProfile` keeps only
+the raw stats and skips the stats achievements read, so nothing accumulates toward one either. On
+the GoatTech server every character had full raw stats and nothing at all in the achievement
+stats, the Elder kill included.
+
+A client connected to a Server Authority server ignores the modded flag for that one check. The
+flag is lowered only while `IsCheatedAtAll` runs and restored straight after, so the "modded" text
+in the main menu and the `isModded` log line stay as Iron Gate asked. Every other reason the game
+withholds achievements still applies: a character that used devcommands, an item spawned with them,
+and world modifiers the game counts as cheats. Single player and player-hosted games are untouched,
+because the client only learns it is on a Server Authority server from the server's answer to its
+manifest.
+
+The same check decides a few other things, which now behave as in an unmodded game. A devcommand
+first asks for `confirmcheats`, and confirming marks the character as having used devcommands,
+which `RejectCheatedProfiles` then refuses. Before, the modded flag made the game treat everyone
+as having cheated already, so it never asked. The maximum comfort, building height and days
+survived counters also move to the achievement stats, so they start from zero.
+
+Progress made before this is not counted, because the game never recorded it. Each player's log
+says at spawn whether achievements are allowed in the session, and if not, why. A later respawn
+repeats it only if the answer changed.
+
 ## Building
 
 Needs the .NET SDK and a Valheim install (client or dedicated server, either has the assemblies).
@@ -1907,6 +1934,7 @@ src/ServerAuthority/
   Pheromones.cs           Lets the anti-sting and troll love meads work on server-owned creatures
   SummonSkill.cs          Sends a summon's skill gain to its summoner's own client
   EarnedStats.cs          Sends chopping, mining, hit and taming stats to the player who earned them
+  AchievementGate.cs      Lets achievements count on a Server Authority server despite BepInEx
   RpcTakeover.cs          Replaces a vanilla RPC handler on the server with one that wraps or redoes it
   Integrity/              Mod manifest, character storage, validation, and both ends of the protocol
   Patches/                One file per subsystem, each explaining what vanilla does and why it changes

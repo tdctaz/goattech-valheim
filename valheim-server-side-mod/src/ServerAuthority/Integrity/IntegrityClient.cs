@@ -35,11 +35,14 @@ namespace ServerAuthority.Integrity
 
         internal static string RejectReason;
 
+        internal static bool OnAuthorityServer { get; private set; }
+
         internal static bool HoldSpawn => _managed && !_ready;
 
         internal static void Reset()
         {
             _server = null;
+            OnAuthorityServer = false;
             _managed = false;
             _ready = false;
             _heldIntro = false;
@@ -167,6 +170,7 @@ namespace ServerAuthority.Integrity
                     return;
                 }
 
+                OnAuthorityServer = true;
                 _managed = characters;
                 _waitingSince = Time.time;
                 if (characters)
