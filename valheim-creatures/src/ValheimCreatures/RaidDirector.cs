@@ -6,6 +6,7 @@ namespace ValheimCreatures
     internal static class RaidDirector
     {
         private const string RaidsRpc = "ValheimCreatures_Raids";
+        private const string WaveRpc = "ValheimCreatures_RaidWave";
         private const float SendSeconds = 2f;
         private const float ComfortSearchRadius = 30f;
         private const float SweepSeconds = 5f;
@@ -454,9 +455,55 @@ namespace ValheimCreatures
                        "with a player in the area";
             }
 
+            int stage = RaidMessages.Stage(remaining, raid.Waves);
+            string text = RaidMessages.For(raid.Template.m_name, stage);
             Plugin.Log.LogInfo(
                 $"Raid {raid.Template.m_name} wave {wave.Number} of {raid.Waves} is defeated; {remaining} waves remain, " +
-                $"{next}.");
+                $"{next}. Players in the area are told \"{text}\".");
+            SendWave(raid, stage);
+        }
+
+        private static void SendWave(Raid raid, int stage)
+        {
+            if (ZRoutedRpc.instance == null)
+            {
+                return;
+            }
+
+            ZPackage package = new ZPackage();
+            package.Write(raid.Template.m_name);
+            package.Write(raid.Position);
+            package.Write(raid.Template.m_eventRange);
+            package.Write(stage);
+            ZRoutedRpc.instance.InvokeRoutedRPC(ZRoutedRpc.Everybody, WaveRpc, package);
+        }
+
+        private static void OnWave(long sender, ZPackage package)
+        {
+            if (ZNet.instance == null || ZNet.instance.IsServer())
+            {
+                return;
+            }
+
+            string name = package.ReadString();
+            Vector3 position = package.ReadVector3();
+            float range = package.ReadSingle();
+            int stage = package.ReadInt();
+            Player player = Player.m_localPlayer;
+            if (player == null || MessageHud.instance == null)
+            {
+                return;
+            }
+
+            Vector3 at = player.transform.position;
+            if (at.y > 3000f || Utils.DistanceXZ(at, position) >= range)
+            {
+                return;
+            }
+
+            string text = RaidMessages.For(name, stage);
+            MessageHud.instance.ShowMessage(MessageHud.MessageType.Center, text);
+            Plugin.Log.LogInfo($"Raid {name} lost a wave: \"{text}\".");
         }
 
         internal static void Adopt(ZDOID parent, ZDOID child)
@@ -564,6 +611,7 @@ namespace ValheimCreatures
 
             _registeredOn = rpc;
             rpc.Register<ZPackage>(RaidsRpc, OnRaids);
+            rpc.Register<ZPackage>(WaveRpc, OnWave);
         }
 
         private static void Send()
