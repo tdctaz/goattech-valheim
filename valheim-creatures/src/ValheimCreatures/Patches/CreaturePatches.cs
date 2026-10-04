@@ -152,6 +152,36 @@ namespace ValheimCreatures.Patches
         }
     }
 
+    [HarmonyPatch(typeof(MonsterAI), nameof(MonsterAI.UpdateAI))]
+    internal static class MonsterAI_UpdateAI_Patch
+    {
+        private static bool Prefix(MonsterAI __instance, float dt, ref bool __result)
+        {
+            if (!Raiders.Returning(__instance))
+            {
+                return true;
+            }
+
+            __result = BaseAI_UpdateAI_Original.UpdateAI(__instance, dt);
+            if (__result)
+            {
+                Raiders.Return(__instance, dt);
+            }
+
+            return false;
+        }
+    }
+
+    [HarmonyPatch(typeof(BaseAI), nameof(BaseAI.UpdateAI))]
+    internal static class BaseAI_UpdateAI_Original
+    {
+        [HarmonyReversePatch]
+        internal static bool UpdateAI(BaseAI instance, float dt)
+        {
+            throw new System.NotImplementedException();
+        }
+    }
+
     [HarmonyPatch(typeof(RandEventSystem), nameof(RandEventSystem.SetRandomEvent))]
     internal static class RandEventSystem_SetRandomEvent_Patch
     {

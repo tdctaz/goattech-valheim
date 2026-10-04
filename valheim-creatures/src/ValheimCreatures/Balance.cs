@@ -46,6 +46,9 @@ namespace ValheimCreatures
         internal int RaidComfortPerWave;
         internal float RaidTimeoutMinutes;
         internal float RaidSpawnDistance;
+        internal float RaidReturnDistance;
+        internal float RaidReturnSeconds;
+        internal int RaidReturnTries;
         internal float DamagePerPlayer = 0.04f;
 
         internal static readonly Balance Vanilla = new Balance();
@@ -92,6 +95,9 @@ namespace ValheimCreatures
                 RaidComfortPerWave = ModConfig.RaidComfortPerWave.Value,
                 RaidTimeoutMinutes = ModConfig.RaidTimeoutMinutes.Value,
                 RaidSpawnDistance = ModConfig.RaidSpawnDistance.Value,
+                RaidReturnDistance = ModConfig.RaidReturnDistance.Value,
+                RaidReturnSeconds = ModConfig.RaidReturnSeconds.Value,
+                RaidReturnTries = ModConfig.RaidReturnTries.Value,
                 DamagePerPlayer = ModConfig.DamagePerPlayer.Value,
             };
 
@@ -150,6 +156,9 @@ namespace ValheimCreatures
             package.Write(RaidComfortPerWave);
             package.Write(RaidTimeoutMinutes);
             package.Write(RaidSpawnDistance);
+            package.Write(RaidReturnDistance);
+            package.Write(RaidReturnSeconds);
+            package.Write(RaidReturnTries);
             package.Write(DamagePerPlayer);
         }
 
@@ -203,6 +212,9 @@ namespace ValheimCreatures
             balance.RaidComfortPerWave = package.ReadInt();
             balance.RaidTimeoutMinutes = package.ReadSingle();
             balance.RaidSpawnDistance = package.ReadSingle();
+            balance.RaidReturnDistance = package.ReadSingle();
+            balance.RaidReturnSeconds = package.ReadSingle();
+            balance.RaidReturnTries = package.ReadInt();
             balance.DamagePerPlayer = package.ReadSingle();
             return balance;
         }

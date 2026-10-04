@@ -68,6 +68,9 @@ namespace ValheimCreatures
         internal static ConfigEntry<int> RaidComfortPerWave;
         internal static ConfigEntry<float> RaidTimeoutMinutes;
         internal static ConfigEntry<float> RaidSpawnDistance;
+        internal static ConfigEntry<float> RaidReturnDistance;
+        internal static ConfigEntry<float> RaidReturnSeconds;
+        internal static ConfigEntry<int> RaidReturnTries;
 
         internal static ConfigEntry<float> DamagePerPlayer;
 
@@ -227,6 +230,22 @@ namespace ValheimCreatures
                     "How far from a player inside the raid area each group of a wave appears. Groups never appear " +
                     "inside a player base or under cover, and the search reaches out to twice this to get clear of one.",
                     new AcceptableValueRange<float>(10f, 90f)));
+            RaidReturnDistance = config.Bind("Raids", "ReturnDistance", 60f,
+                new ConfigDescription(
+                    "A raider farther than this from the raid's centre has wandered off and heads back to the centre, " +
+                    "unless a player is within 30 m of it or it is after a player within 60 m. New raiders get 15 " +
+                    "seconds first, and each trip back is followed by 10 seconds before the next check.",
+                    new AcceptableValueRange<float>(20f, 150f)));
+            RaidReturnSeconds = config.Bind("Raids", "ReturnSeconds", 30f,
+                new ConfigDescription(
+                    "How long a wandering raider heads back, ignoring everything but a player who comes within 30 m. " +
+                    "It stops early once it is within half of ReturnDistance of the centre. 0 turns heading back off.",
+                    new AcceptableValueRange<float>(0f, 120f)));
+            RaidReturnTries = config.Bind("Raids", "ReturnTries", 3,
+                new ConfigDescription(
+                    "A raider that wanders off again after this many trips back, without 90 seconds of calm in between, " +
+                    "leaves the raid and stays as an ordinary monster.",
+                    new AcceptableValueRange<int>(1, 10)));
 
             DamagePerPlayer = config.Bind("Difficulty", "DamagePerPlayer", 0f,
                 new ConfigDescription(
