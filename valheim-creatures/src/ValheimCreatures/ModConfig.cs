@@ -23,7 +23,6 @@ namespace ValheimCreatures
         internal static ConfigEntry<int> MaxStarsBeforeTrophy;
         internal static ConfigEntry<int> MaxStarsWithoutBoss;
         internal static ConfigEntry<float> LevelUpChance;
-        internal static ConfigEntry<float> BossDefeatedChanceMultiplier;
         internal static ConfigEntry<string> BossFactions;
         internal static ConfigEntry<string> BossCreatures;
         internal static ConfigEntry<string> StarlessBosses;
@@ -105,10 +104,6 @@ namespace ValheimCreatures
                     "Percent chance of each further star, rolled one star at a time. Vanilla is 10. A spawn that " +
                     "sets its own chance keeps it, and world modifiers and world level still apply.",
                     new AcceptableValueRange<float>(0f, 100f)));
-            BossDefeatedChanceMultiplier = config.Bind("Stars", "BossDefeatedChanceMultiplier", 2f,
-                new ConfigDescription(
-                    "Multiplies the chance of each star once the boss of the creature's faction has been killed.",
-                    new AcceptableValueRange<float>(1f, 10f)));
             BossFactions = config.Bind("Stars", "BossFactions", DefaultBossFactions,
                 "Which boss rules which faction, as BossPrefab:Faction pairs. A faction that is not listed has " +
                 "no boss. The boss's own defeat key tells whether it has been killed, and its trophy on the " +

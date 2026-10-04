@@ -101,10 +101,6 @@ namespace ValheimCreatures
             float baseChance = spawnChance > 0f ? spawnChance : VanillaLevelUpChance;
             baseChance *= balance.LevelUpChance / VanillaLevelUpChance;
             float chance = baseChance > 0f ? SpawnSystem.GetLevelUpChance(position, baseChance) : 0f;
-            if (stage == BossStage.Defeated || stage == BossStage.TrophyPlaced)
-            {
-                chance *= balance.BossDefeatedChanceMultiplier;
-            }
 
             int level = Mathf.Max(1, minLevel);
             int maxLevel = Mathf.Max(level, maxStars + 1);

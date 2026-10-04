@@ -27,8 +27,8 @@ vanilla still never does.
 | Faction's boss | Most stars |
 | --- | --- |
 | Alive | 3 |
-| Killed | 3, and each star is twice as likely |
-| Killed, and its head hangs on the sacrificial stones | 5, each star twice as likely |
+| Killed | 3 |
+| Killed, and its head hangs on the sacrificial stones | 5 |
 | Faction has no boss | 2, as in vanilla |
 
 The chance of each further star is vanilla's: 10%, rolled one star at a time, so 1 in 10 creatures
@@ -263,7 +263,6 @@ connected to a server; a client's own copy applies in single player and when hos
 | `Stars.MaxStarsBeforeTrophy` | `3` | Until then. |
 | `Stars.MaxStarsWithoutBoss` | `2` | Factions with no boss. 2 is vanilla. |
 | `Stars.LevelUpChance` | `10` | Percent per star. 10 is vanilla. |
-| `Stars.BossDefeatedChanceMultiplier` | `2` | Once the faction's boss is killed. |
 | `Stars.BossFactions` | see above | `BossPrefab:Faction` pairs. |
 | `Stars.CenterProtectionBoss` | `Eikthyr` | Whose trophy lifts vanilla's zero stars near the world center. Empty keeps it. |
 | `Stars.BossCreatures` | Meadows animals to Eikthyr, stone golems to Moder | `CreaturePrefab:BossPrefab` pairs, overriding the faction. |

@@ -8,7 +8,6 @@ namespace ValheimCreatures
         internal int MaxStarsBeforeTrophy = 2;
         internal int MaxStarsWithoutBoss = 2;
         internal float LevelUpChance = 10f;
-        internal float BossDefeatedChanceMultiplier = 1f;
         internal string BossFactions = "";
         internal string BossCreatures = "";
         internal string StarlessBosses = "";
@@ -60,7 +59,6 @@ namespace ValheimCreatures
                 MaxStarsBeforeTrophy = ModConfig.MaxStarsBeforeTrophy.Value,
                 MaxStarsWithoutBoss = ModConfig.MaxStarsWithoutBoss.Value,
                 LevelUpChance = ModConfig.LevelUpChance.Value,
-                BossDefeatedChanceMultiplier = ModConfig.BossDefeatedChanceMultiplier.Value,
                 BossFactions = ModConfig.BossFactions.Value,
                 BossCreatures = ModConfig.BossCreatures.Value,
                 StarlessBosses = ModConfig.StarlessBosses.Value,
@@ -113,7 +111,6 @@ namespace ValheimCreatures
             package.Write(MaxStarsBeforeTrophy);
             package.Write(MaxStarsWithoutBoss);
             package.Write(LevelUpChance);
-            package.Write(BossDefeatedChanceMultiplier);
             package.Write(BossFactions);
             package.Write(BossCreatures);
             package.Write(StarlessBosses);
@@ -165,7 +162,6 @@ namespace ValheimCreatures
                 MaxStarsBeforeTrophy = package.ReadInt(),
                 MaxStarsWithoutBoss = package.ReadInt(),
                 LevelUpChance = package.ReadSingle(),
-                BossDefeatedChanceMultiplier = package.ReadSingle(),
                 BossFactions = package.ReadString(),
                 BossCreatures = package.ReadString(),
                 StarlessBosses = package.ReadString(),
@@ -214,7 +210,7 @@ namespace ValheimCreatures
         public override string ToString()
         {
             return $"max stars {MaxStars}, before trophy {MaxStarsBeforeTrophy}, without boss {MaxStarsWithoutBoss}, " +
-                   $"level up chance {LevelUpChance}%, boss defeated x{BossDefeatedChanceMultiplier}, " +
+                   $"level up chance {LevelUpChance}%, " +
                    $"damage per extra player {DamagePerPlayer}";
         }
     }
