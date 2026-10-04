@@ -43,6 +43,7 @@ namespace ValheimCreatures
         internal float RaidWaveInterval;
         internal float RaidNextWaveMinutes;
         internal int RaidMaxActiveWaves;
+        internal string RaidBossRaids = "";
         internal int RaidMaxWaves;
         internal int RaidPlayerWavesMax;
         internal int RaidComfortPerWave;
@@ -94,6 +95,7 @@ namespace ValheimCreatures
                 RaidWaveInterval = ModConfig.RaidWaveInterval.Value,
                 RaidNextWaveMinutes = ModConfig.RaidNextWaveMinutes.Value,
                 RaidMaxActiveWaves = ModConfig.RaidMaxActiveWaves.Value,
+                RaidBossRaids = ModConfig.RaidBossRaids.Value,
                 RaidMaxWaves = ModConfig.RaidMaxWaves.Value,
                 RaidPlayerWavesMax = ModConfig.RaidPlayerWavesMax.Value,
                 RaidComfortPerWave = ModConfig.RaidComfortPerWave.Value,
@@ -157,6 +159,7 @@ namespace ValheimCreatures
             package.Write(RaidWaveInterval);
             package.Write(RaidNextWaveMinutes);
             package.Write(RaidMaxActiveWaves);
+            package.Write(RaidBossRaids ?? "");
             package.Write(RaidMaxWaves);
             package.Write(RaidPlayerWavesMax);
             package.Write(RaidComfortPerWave);
@@ -215,6 +218,7 @@ namespace ValheimCreatures
             balance.RaidWaveInterval = package.ReadSingle();
             balance.RaidNextWaveMinutes = package.ReadSingle();
             balance.RaidMaxActiveWaves = package.ReadInt();
+            balance.RaidBossRaids = package.ReadString();
             balance.RaidMaxWaves = package.ReadInt();
             balance.RaidPlayerWavesMax = package.ReadInt();
             balance.RaidComfortPerWave = package.ReadInt();

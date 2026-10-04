@@ -21,10 +21,23 @@ namespace ValheimCreatures
             internal readonly Dictionary<ZDOID, float> Dying = new Dictionary<ZDOID, float>();
         }
 
+        private sealed class Line
+        {
+            internal SpawnSystem.SpawnData Data;
+            internal bool Boss;
+            internal float Next;
+            internal readonly List<ZDOID> Creatures = new List<ZDOID>();
+        }
+
         private sealed class Raid
         {
             internal RandomEvent Template;
             internal Vector3 Position;
+            internal string BossPrefab;
+            internal bool BossDown;
+            internal readonly List<ZDOID> Bosses = new List<ZDOID>();
+            internal readonly HashSet<ZDOID> Crowned = new HashSet<ZDOID>();
+            internal readonly List<Line> Lines = new List<Line>();
             internal int Waves;
             internal bool Sized;
             internal bool HeldLogged;
@@ -121,6 +134,7 @@ namespace ValheimCreatures
             {
                 Template = template,
                 Position = position,
+                BossPrefab = BossFor(ev, ConfigSync.Current.RaidBossRaids),
                 NextWave = Mathf.Max(0f, ev.m_spawnerDelay),
             };
 
@@ -129,10 +143,58 @@ namespace ValheimCreatures
             Send();
         }
 
+        private static string BossFor(RandomEvent ev, string mapping)
+        {
+            foreach (string entry in (mapping ?? "").Split(new[] { ',', ';' }, System.StringSplitOptions.RemoveEmptyEntries))
+            {
+                string[] parts = entry.Split(':');
+                if (parts.Length != 2)
+                {
+                    Plugin.Log.LogWarning($"Raids.BossRaids: '{entry.Trim()}' is not a RaidName:BossPrefab pair.");
+                    continue;
+                }
+
+                if (parts[0].Trim() != ev.m_name)
+                {
+                    continue;
+                }
+
+                string boss = parts[1].Trim();
+                foreach (SpawnSystem.SpawnData data in ev.m_spawn)
+                {
+                    if (WaveSpawner.Usable(data) && data.m_prefab.name == boss)
+                    {
+                        return boss;
+                    }
+                }
+
+                Plugin.Log.LogWarning(
+                    $"Raids.BossRaids names {boss} as the boss of {ev.m_name}, but that raid spawns no {boss}, so it " +
+                    "runs as an ordinary raid.");
+            }
+
+            return null;
+        }
+
         private static void Size(Raid raid, Balance balance, int players)
         {
             if (raid.Sized && players <= raid.Players)
             {
+                return;
+            }
+
+            if (raid.BossPrefab != null)
+            {
+                if (!raid.Sized)
+                {
+                    raid.Sized = true;
+                    raid.Waves = 1;
+                    Plugin.Log.LogInfo(
+                        $"Raid {raid.Template.m_name} at ({raid.Position.x:0}, {raid.Position.z:0}) is a boss raid: " +
+                        $"one wave with {raid.BossPrefab}, and the rest keep coming as in vanilla until it is down.");
+                }
+
+                raid.Players = players;
                 return;
             }
 
@@ -228,7 +290,23 @@ namespace ValheimCreatures
 
                 Prune(raid, present, dt, balance);
 
-                if (present && raid.Spawned < raid.Waves && raid.InArea >= raid.NextWave)
+                if (raid.BossPrefab != null)
+                {
+                    TrackBoss(raid);
+                    if (present && raid.Spawned == 0 && raid.InArea >= raid.NextWave)
+                    {
+                        if (!StartBossWave(raid, players, balance))
+                        {
+                            Ended.Add(raid);
+                            continue;
+                        }
+                    }
+                    else if (present && raid.Spawned > 0)
+                    {
+                        Trickle(raid, players, balance);
+                    }
+                }
+                else if (present && raid.Spawned < raid.Waves && raid.InArea >= raid.NextWave)
                 {
                     int most = Mathf.Max(1, balance.RaidMaxActiveWaves);
                     if (raid.Live.Count < most)
@@ -332,6 +410,172 @@ namespace ValheimCreatures
                 $"{raid.Live.Count} of its waves are alive; the next is due in {NextWaveSeconds(balance):0} s with a " +
                 $"player in the area, sooner if these die.{WaveSpawner.Placements()}{WaveSpawner.Rejected()}");
             return true;
+        }
+
+        private static bool StartBossWave(Raid raid, List<Vector3> players, Balance balance)
+        {
+            List<string> names = new List<string>();
+            List<ZDOID> spawned = new List<ZDOID>();
+            SpawnSystem.SpawnData bossLine = null;
+            WaveSpawner.Begin();
+            foreach (SpawnSystem.SpawnData data in raid.Template.m_spawn)
+            {
+                if (WaveSpawner.Usable(data) && data.m_prefab.name == raid.BossPrefab)
+                {
+                    bossLine = data;
+                    Line line = new Line { Data = data, Boss = true };
+                    raid.Lines.Add(line);
+                    WaveSpawner.Group(data, 1, Center(players, balance), "raid", null, names, line.Creatures);
+                    raid.Bosses.AddRange(line.Creatures);
+                    spawned.AddRange(line.Creatures);
+                    break;
+                }
+            }
+
+            if (raid.Bosses.Count == 0)
+            {
+                Plugin.Log.LogInfo(
+                    $"Raid {raid.Template.m_name} found no open ground outside the base for {raid.BossPrefab}, so the " +
+                    $"raid ends.{WaveSpawner.Rejected()}");
+                return false;
+            }
+
+            foreach (SpawnSystem.SpawnData data in raid.Template.m_spawn)
+            {
+                if (!WaveSpawner.Usable(data) || data == bossLine)
+                {
+                    continue;
+                }
+
+                Line line = new Line { Data = data, Next = raid.InArea + Mathf.Max(1f, data.m_spawnInterval) };
+                raid.Lines.Add(line);
+                int count = Due(line);
+                if (count > 0)
+                {
+                    WaveSpawner.Group(data, count, Center(players, balance), "raid", null, names, line.Creatures);
+                    spawned.AddRange(line.Creatures);
+                }
+            }
+
+            raid.Spawned = 1;
+            Wave wave = new Wave { Number = 1 };
+            wave.Creatures.AddRange(spawned);
+            raid.Live.Add(wave);
+            foreach (ZDOID id in spawned)
+            {
+                Raiders.Enlist(id, raid.Position);
+            }
+
+            foreach (ZDOID id in raid.Bosses)
+            {
+                raid.Crowned.Add(id);
+                Raiders.Crown(id);
+            }
+
+            Plugin.Log.LogInfo(
+                $"Raid {raid.Template.m_name} boss wave: {string.Join(", ", names)}. The rest keep coming as in vanilla " +
+                $"until {raid.BossPrefab} is down.{WaveSpawner.Placements()}{WaveSpawner.Rejected()}");
+            return true;
+        }
+
+        private static void Trickle(Raid raid, List<Vector3> players, Balance balance)
+        {
+            if (raid.BossDown || raid.Live.Count == 0)
+            {
+                return;
+            }
+
+            Wave wave = raid.Live[0];
+            List<string> names = null;
+            foreach (Line line in raid.Lines)
+            {
+                if (line.Boss || raid.InArea < line.Next)
+                {
+                    continue;
+                }
+
+                SpawnSystem.SpawnData data = line.Data;
+                line.Next = raid.InArea + Mathf.Max(1f, data.m_spawnInterval);
+                int count = Due(line);
+                if (count <= 0)
+                {
+                    continue;
+                }
+
+                if (names == null)
+                {
+                    names = new List<string>();
+                    WaveSpawner.Begin();
+                }
+
+                List<ZDOID> spawned = new List<ZDOID>();
+                WaveSpawner.Group(data, count, Center(players, balance), "raid", null, names, spawned);
+                line.Creatures.AddRange(spawned);
+                wave.Creatures.AddRange(spawned);
+                foreach (ZDOID id in spawned)
+                {
+                    Raiders.Enlist(id, raid.Position);
+                }
+            }
+
+            if (names != null && names.Count > 0)
+            {
+                Plugin.Log.LogInfo(
+                    $"Raid {raid.Template.m_name} sends more while {raid.BossPrefab} stands: {string.Join(", ", names)}." +
+                    $"{WaveSpawner.Placements()}{WaveSpawner.Rejected()}");
+            }
+        }
+
+        private static int Due(Line line)
+        {
+            SpawnSystem.SpawnData data = line.Data;
+            if (Random.Range(0f, 100f) > data.m_spawnChance || (!data.m_spawnAtDay && EnvMan.IsDay()) ||
+                (!data.m_spawnAtNight && EnvMan.IsNight()))
+            {
+                return 0;
+            }
+
+            int room = data.m_maxSpawned > 0 ? data.m_maxSpawned - line.Creatures.Count : int.MaxValue;
+            return Mathf.Min(Random.Range(data.m_groupSizeMin, data.m_groupSizeMax + 1), room);
+        }
+
+        private static void TrackBoss(Raid raid)
+        {
+            if (raid.Spawned == 0)
+            {
+                return;
+            }
+
+            List<ZDOID> live = raid.Live.Count > 0 ? raid.Live[0].Creatures : null;
+            foreach (Line line in raid.Lines)
+            {
+                line.Creatures.RemoveAll(id => live == null || !live.Contains(id));
+            }
+
+            raid.Bosses.RemoveAll(id => live == null || !live.Contains(id) || Fallen(id));
+            bool down = raid.Bosses.Count == 0;
+            if (down == raid.BossDown)
+            {
+                return;
+            }
+
+            raid.BossDown = down;
+            Plugin.Log.LogInfo(down
+                ? $"Raid {raid.Template.m_name}: {raid.BossPrefab} is down, so no more raiders come; the raid ends once " +
+                  $"the {Alive(raid)} left are defeated."
+                : $"Raid {raid.Template.m_name}: {raid.BossPrefab} split in {raid.Bosses.Count}, so the rest keep coming " +
+                  "until those are down too.");
+        }
+
+        private static bool Fallen(ZDOID id)
+        {
+            ZDO zdo = ZDOMan.instance.GetZDO(id);
+            return zdo == null || zdo.GetFloat(ZDOVars.s_health, 1f) <= 0f;
+        }
+
+        private static System.Func<SpawnSystem.SpawnData, Vector3?> Center(List<Vector3> players, Balance balance)
+        {
+            return data => WaveSpawner.Around(players[Random.Range(0, players.Count)], balance.RaidSpawnDistance, data);
         }
 
         private static float NextWaveSeconds(Balance balance)
@@ -512,11 +756,28 @@ namespace ValheimCreatures
             {
                 foreach (Wave wave in raid.Live)
                 {
-                    if (wave.Creatures.Contains(parent))
+                    if (!wave.Creatures.Contains(parent))
                     {
-                        wave.Creatures.Add(child);
-                        return;
+                        continue;
                     }
+
+                    wave.Creatures.Add(child);
+                    if (raid.Crowned.Contains(parent))
+                    {
+                        raid.Bosses.Add(child);
+                        raid.Crowned.Add(child);
+                        Raiders.Crown(child);
+                    }
+
+                    foreach (Line line in raid.Lines)
+                    {
+                        if (line.Creatures.Contains(parent))
+                        {
+                            line.Creatures.Add(child);
+                        }
+                    }
+
+                    return;
                 }
             }
         }
@@ -593,6 +854,7 @@ namespace ValheimCreatures
                 parts.Add(
                     $"{raid.Template.m_name} at ({raid.Position.x:0}, {raid.Position.z:0}) wave {raid.Spawned}/" +
                     $"{(raid.Sized ? raid.Waves.ToString() : "?")}, {raid.Defeated} defeated, " +
+                    (raid.BossPrefab != null ? $"{raid.BossPrefab} {(raid.BossDown ? "down" : "standing")}, " : "") +
                     $"{raid.Live.Count} waves alive with {Alive(raid)} creatures, next due in " +
                     $"{Mathf.Max(0f, raid.NextWave - raid.InArea):0} s, comfort {raid.Comfort}, {raid.Players} players, " +
                     $"{raid.Age / 60f:0.0} min");

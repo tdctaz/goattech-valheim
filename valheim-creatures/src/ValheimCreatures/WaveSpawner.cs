@@ -21,73 +21,90 @@ namespace ValheimCreatures
         internal static List<ZDOID> Spawn(RandomEvent raid, Func<SpawnSystem.SpawnData, Vector3?> groupCenter,
             string source, Character tracker, List<string> names)
         {
+            Begin();
+            List<ZDOID> spawned = new List<ZDOID>();
+            foreach (SpawnSystem.SpawnData data in raid.m_spawn)
+            {
+                if (!Usable(data))
+                {
+                    continue;
+                }
+
+                int count = UnityEngine.Random.Range(data.m_groupSizeMin, data.m_groupSizeMax + 1);
+                Group(data, count, groupCenter, source, tracker, names, spawned);
+            }
+
+            return spawned;
+        }
+
+        internal static bool Usable(SpawnSystem.SpawnData data)
+        {
+            return data != null && data.m_enabled && data.m_prefab != null;
+        }
+
+        internal static void Begin()
+        {
             _inBase = 0;
             _covered = 0;
             _water = 0;
             _noFloor = 0;
             Dropped.Clear();
             Placed.Clear();
-            List<ZDOID> spawned = new List<ZDOID>();
-            foreach (SpawnSystem.SpawnData data in raid.m_spawn)
+        }
+
+        internal static void Group(SpawnSystem.SpawnData data, int count,
+            Func<SpawnSystem.SpawnData, Vector3?> groupCenter, string source, Character tracker, List<string> names,
+            List<ZDOID> spawned)
+        {
+            Vector3? center = count > 0 ? groupCenter(data) : null;
+            if (center == null)
             {
-                if (data == null || !data.m_enabled || data.m_prefab == null)
+                if (count > 0)
                 {
-                    continue;
+                    Dropped.Add(data.m_prefab.name);
                 }
 
-                int count = UnityEngine.Random.Range(data.m_groupSizeMin, data.m_groupSizeMax + 1);
-                Vector3? center = count > 0 ? groupCenter(data) : null;
-                if (center == null)
-                {
-                    if (count > 0)
-                    {
-                        Dropped.Add(data.m_prefab.name);
-                    }
-
-                    continue;
-                }
-
-                Placed.Add(Describe(data.m_prefab.name, count, center.Value));
-                for (int i = 0; i < count; i++)
-                {
-                    Vector3 position = count > 1 ? Member(center.Value, data) : center.Value;
-                    position.y += data.m_groundOffset;
-
-                    GameObject go = UnityEngine.Object.Instantiate(data.m_prefab, position, Quaternion.identity);
-                    names?.Add(data.m_prefab.name);
-                    ZNetView view = go.GetComponent<ZNetView>();
-                    if (view != null && view.GetZDO() != null)
-                    {
-                        spawned.Add(view.GetZDO().m_uid);
-                    }
-
-                    Character character = go.GetComponent<Character>();
-                    if (character == null)
-                    {
-                        continue;
-                    }
-
-                    character.GetBaseAI()?.SetHuntPlayer(true);
-
-                    bool eligible = data.m_maxLevel > 1 || StarCapable.Can(character);
-                    bool protectedCenter = data.m_levelUpMinCenterDistance > 0f &&
-                                           position.magnitude <= data.m_levelUpMinCenterDistance &&
-                                           !BossProgress.CenterProtectionLifted();
-                    if (eligible && !protectedCenter)
-                    {
-                        LevelRoll.Roll(character, data.m_minLevel, data.m_overrideLevelupChance, position, source);
-                    }
-
-#if DEBUG_TOOLS
-                    if (tracker != null && TestCommands.IsTracked(tracker))
-                    {
-                        TestCommands.Track(character);
-                    }
-#endif
-                }
+                return;
             }
 
-            return spawned;
+            Placed.Add(Describe(data.m_prefab.name, count, center.Value));
+            for (int i = 0; i < count; i++)
+            {
+                Vector3 position = count > 1 ? Member(center.Value, data) : center.Value;
+                position.y += data.m_groundOffset;
+
+                GameObject go = UnityEngine.Object.Instantiate(data.m_prefab, position, Quaternion.identity);
+                names?.Add(data.m_prefab.name);
+                ZNetView view = go.GetComponent<ZNetView>();
+                if (view != null && view.GetZDO() != null)
+                {
+                    spawned.Add(view.GetZDO().m_uid);
+                }
+
+                Character character = go.GetComponent<Character>();
+                if (character == null)
+                {
+                    continue;
+                }
+
+                character.GetBaseAI()?.SetHuntPlayer(true);
+
+                bool eligible = data.m_maxLevel > 1 || StarCapable.Can(character);
+                bool protectedCenter = data.m_levelUpMinCenterDistance > 0f &&
+                                       position.magnitude <= data.m_levelUpMinCenterDistance &&
+                                       !BossProgress.CenterProtectionLifted();
+                if (eligible && !protectedCenter)
+                {
+                    LevelRoll.Roll(character, data.m_minLevel, data.m_overrideLevelupChance, position, source);
+                }
+
+#if DEBUG_TOOLS
+                if (tracker != null && TestCommands.IsTracked(tracker))
+                {
+                    TestCommands.Track(character);
+                }
+#endif
+            }
         }
 
         internal static string Rejected()

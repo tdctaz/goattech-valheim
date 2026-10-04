@@ -65,6 +65,7 @@ namespace ValheimCreatures
         internal static ConfigEntry<float> RaidWaveInterval;
         internal static ConfigEntry<float> RaidNextWaveMinutes;
         internal static ConfigEntry<int> RaidMaxActiveWaves;
+        internal static ConfigEntry<string> RaidBossRaids;
         internal static ConfigEntry<int> RaidMaxWaves;
         internal static ConfigEntry<int> RaidPlayerWavesMax;
         internal static ConfigEntry<int> RaidComfortPerWave;
@@ -213,6 +214,13 @@ namespace ValheimCreatures
                     "Minutes from one wave appearing to the next, even if the first is still alive. The clock only runs " +
                     "while a player is inside the raid's area. A wave that is due waits while MaxActiveWaves are alive.",
                     new AcceptableValueRange<float>(0.5f, 30f)));
+            RaidBossRaids = config.Bind("Raids", "BossRaids",
+                "hildirboss1:Skeleton_Hildir_nochest, hildirboss2:Fenring_Cultist_Hildir_nochest, " +
+                "hildirboss3:GoblinBruteBros_nochest",
+                "Raids fought around a single boss, as RaidName:BossPrefab pairs. Such a raid is one wave: the boss " +
+                "once and one group of everything else. The rest keep coming as in vanilla, each at its own interval, " +
+                "chance and most alive, until the boss is down; then nothing more comes and the raid ends once what " +
+                "is left is defeated.");
             RaidMaxActiveWaves = config.Bind("Raids", "MaxActiveWaves", 2,
                 new ConfigDescription(
                     "The most waves of one raid alive at once. A wave is defeated when every creature in it is dead, has " +

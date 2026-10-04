@@ -14,6 +14,7 @@ namespace ValheimCreatures
         private const float TargetRange = 60f;
 
         private static readonly int CenterKey = "ValheimCreatures_RaidCenter".GetStableHashCode();
+        private static readonly int BossKey = "ValheimCreatures_RaidBoss".GetStableHashCode();
         private static readonly Dictionary<Character, Raider> Known = new Dictionary<Character, Raider>();
         private static readonly List<Character> Scratch = new List<Character>();
 
@@ -24,6 +25,7 @@ namespace ValheimCreatures
             internal float ReturnUntil;
             internal float LastReturn;
             internal int Returns;
+            internal bool Boss;
         }
 
         internal static void Reset()
@@ -42,7 +44,12 @@ namespace ValheimCreatures
             ZDO zdo = character.m_nview != null ? character.m_nview.GetZDO() : null;
             if (zdo != null && zdo.GetVec3(CenterKey, out Vector3 center))
             {
-                Known[character] = new Raider { Center = center, NextCheck = Time.time + GraceSeconds };
+                Known[character] = new Raider
+                {
+                    Center = center,
+                    NextCheck = Time.time + GraceSeconds,
+                    Boss = zdo.GetBool(BossKey),
+                };
             }
         }
 
@@ -78,6 +85,23 @@ namespace ValheimCreatures
 
             Mark(zdo, center);
             Track(character, center);
+        }
+
+        internal static void Crown(ZDOID id)
+        {
+            ZDO zdo = ZDOMan.instance.GetZDO(id);
+            if (zdo == null)
+            {
+                return;
+            }
+
+            zdo.Set(BossKey, true);
+            GameObject go = ZNetScene.instance.FindInstance(id);
+            Character character = go != null ? go.GetComponent<Character>() : null;
+            if (character != null && Known.TryGetValue(character, out Raider raider))
+            {
+                raider.Boss = true;
+            }
         }
 
         private static void Mark(ZDO zdo, Vector3 center)
@@ -190,7 +214,7 @@ namespace ValheimCreatures
                 raider.Returns = 0;
             }
 
-            if (raider.Returns >= balance.RaidReturnTries)
+            if (raider.Returns >= balance.RaidReturnTries && !raider.Boss)
             {
                 Plugin.Log.LogInfo(
                     $"Raider {Name(ai.m_character)} has wandered {distance:0} m from the raid centre again after " +
