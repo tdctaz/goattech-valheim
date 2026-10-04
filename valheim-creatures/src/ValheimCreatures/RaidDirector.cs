@@ -8,6 +8,7 @@ namespace ValheimCreatures
         private const string RaidsRpc = "ValheimCreatures_Raids";
         private const float SendSeconds = 2f;
         private const float ComfortSearchRadius = 30f;
+        private const float SweepSeconds = 5f;
 
         private sealed class Raid
         {
@@ -40,6 +41,7 @@ namespace ValheimCreatures
 
         private static ZRoutedRpc _registeredOn;
         private static float _sendTimer;
+        private static float _sweepTimer;
         private static bool _applying;
         private static bool _showing;
         private static bool _heldOffLogged;
@@ -47,14 +49,16 @@ namespace ValheimCreatures
         internal static void Reset()
         {
             Active.Clear();
+            Raiders.Reset();
             Known.Clear();
             _registeredOn = null;
             _sendTimer = 0f;
+            _sweepTimer = 0f;
             _showing = false;
             _heldOffLogged = false;
         }
 
-        private static bool RunsHere()
+        internal static bool RunsHere()
         {
             Balance balance = ConfigSync.Current;
             ZNet znet = ZNet.instance;
@@ -181,6 +185,7 @@ namespace ValheimCreatures
                     Send();
                 }
 
+                SweepRaiders(Time.deltaTime);
                 return;
             }
 
@@ -196,7 +201,6 @@ namespace ValheimCreatures
                     Plugin.Log.LogInfo(
                         $"Raid {raid.Template.m_name} ran out of time after {raid.Spawned} of {raid.Waves} waves; " +
                         $"{Alive(raid)} creatures remain as ordinary monsters.");
-                    Release(raid);
                     Ended.Add(raid);
                     continue;
                 }
@@ -274,6 +278,33 @@ namespace ValheimCreatures
                 _sendTimer = 0f;
                 Send();
             }
+
+            SweepRaiders(dt);
+        }
+
+        private static void SweepRaiders(float dt)
+        {
+            _sweepTimer += dt;
+            if (_sweepTimer < SweepSeconds)
+            {
+                return;
+            }
+
+            _sweepTimer = 0f;
+            Raiders.Sweep(Running);
+        }
+
+        private static bool Running(Vector3 center)
+        {
+            foreach (Raid raid in Active)
+            {
+                if (Utils.DistanceXZ(raid.Position, center) < 1f)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static bool SpawnWave(Raid raid, List<Vector3> players, Balance balance)
@@ -292,6 +323,11 @@ namespace ValheimCreatures
 
             raid.Spawned++;
             raid.Creatures.AddRange(spawned);
+            foreach (ZDOID id in spawned)
+            {
+                Raiders.Enlist(id, raid.Position);
+            }
+
             Plugin.Log.LogInfo(
                 $"Raid {raid.Template.m_name} wave {raid.Spawned} of {raid.Waves}: {string.Join(", ", names)}." +
                 WaveSpawner.Placements() + WaveSpawner.Rejected());
@@ -334,19 +370,6 @@ namespace ValheimCreatures
                 return zdo == null || zdo.GetFloat(ZDOVars.s_health, 1f) <= 0f;
             });
             return raid.Creatures.Count;
-        }
-
-        private static void Release(Raid raid)
-        {
-            foreach (ZDOID id in raid.Creatures)
-            {
-                GameObject go = ZNetScene.instance.FindInstance(id);
-                BaseAI ai = go != null ? go.GetComponent<BaseAI>() : null;
-                if (ai != null && ai.m_nview != null && ai.m_nview.IsOwner())
-                {
-                    ai.SetHuntPlayer(false);
-                }
-            }
         }
 
         /// <summary>

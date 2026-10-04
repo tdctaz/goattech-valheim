@@ -101,6 +101,11 @@ namespace ValheimCreatures
                     childAI.SetHuntPlayer(true);
                 }
 
+                if (Raiders.TryCenter(parent, out Vector3 center))
+                {
+                    Raiders.Enlist(child, center);
+                }
+
                 if (parentAI.IsAlerted())
                 {
                     childAI.Alert();

@@ -165,6 +165,7 @@ namespace ValheimCreatures
             if (_character != null && ByCharacter.TryGetValue(_character, out CreatureTraits traits) && traits == this)
             {
                 ByCharacter.Remove(_character);
+                Raiders.Forget(_character);
             }
         }
 

@@ -12,6 +12,7 @@ namespace ValheimCreatures.Patches
         private static void Postfix(Character __instance)
         {
             CreatureTraits.Attach(__instance);
+            Raiders.Register(__instance);
             LevelRoll.Capture(__instance);
         }
     }
@@ -135,6 +136,18 @@ namespace ValheimCreatures.Patches
                 (!(target is Player player) || (!player.IsDebugFlying() && !player.InGhostMode())))
             {
                 __result = true;
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(BaseAI), nameof(BaseAI.IsEnemy), typeof(Character), typeof(Character))]
+    internal static class BaseAI_IsEnemy_Patch
+    {
+        private static void Postfix(Character a, Character b, ref bool __result)
+        {
+            if (__result && Raiders.Ignores(a, b))
+            {
+                __result = false;
             }
         }
     }
