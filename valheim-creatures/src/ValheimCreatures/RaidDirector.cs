@@ -9,6 +9,16 @@ namespace ValheimCreatures
         private const float SendSeconds = 2f;
         private const float ComfortSearchRadius = 30f;
         private const float SweepSeconds = 5f;
+        private const float LostSeconds = 60f;
+        private const float DyingSeconds = 10f;
+
+        private sealed class Wave
+        {
+            internal int Number;
+            internal readonly List<ZDOID> Creatures = new List<ZDOID>();
+            internal readonly Dictionary<ZDOID, float> Away = new Dictionary<ZDOID, float>();
+            internal readonly Dictionary<ZDOID, float> Dying = new Dictionary<ZDOID, float>();
+        }
 
         private sealed class Raid
         {
@@ -16,15 +26,15 @@ namespace ValheimCreatures
             internal Vector3 Position;
             internal int Waves;
             internal bool Sized;
-            internal bool WaveUp;
             internal bool HeldLogged;
             internal int Spawned;
+            internal int Defeated;
             internal int Comfort;
             internal int Players;
             internal float InArea;
             internal float NextWave;
             internal float Age;
-            internal readonly List<ZDOID> Creatures = new List<ZDOID>();
+            internal readonly List<Wave> Live = new List<Wave>();
         }
 
         private sealed class Shown
@@ -38,6 +48,7 @@ namespace ValheimCreatures
         private static readonly List<Raid> Ended = new List<Raid>();
         private static readonly List<Shown> Known = new List<Shown>();
         private static readonly List<Piece> Pieces = new List<Piece>();
+        private static readonly List<string> Lost = new List<string>();
 
         private static ZRoutedRpc _registeredOn;
         private static float _sendTimer;
@@ -192,7 +203,6 @@ namespace ValheimCreatures
             float dt = Time.deltaTime;
             Balance balance = ConfigSync.Current;
             Ended.Clear();
-            Raid waveUp = RaidWithWaveUp();
             foreach (Raid raid in Active)
             {
                 raid.Age += dt;
@@ -206,7 +216,8 @@ namespace ValheimCreatures
                 }
 
                 List<Vector3> players = PlayersInArea(raid);
-                if (players.Count > 0)
+                bool present = players.Count > 0;
+                if (present)
                 {
                     Size(raid, balance, players.Count);
 
@@ -214,26 +225,12 @@ namespace ValheimCreatures
                     raid.Template.m_time = raid.InArea;
                 }
 
-                if (raid.WaveUp && Alive(raid) == 0)
-                {
-                    raid.WaveUp = false;
-                    raid.NextWave = raid.InArea + Mathf.Max(10f, balance.RaidWaveInterval);
-                    if (waveUp == raid)
-                    {
-                        waveUp = null;
-                    }
+                Prune(raid, present, dt, balance);
 
-                    if (raid.Spawned < raid.Waves)
-                    {
-                        Plugin.Log.LogInfo(
-                            $"Raid {raid.Template.m_name} wave {raid.Spawned} of {raid.Waves} is dead; the next comes " +
-                            $"after {Mathf.Max(10f, balance.RaidWaveInterval):0} seconds with a player in the area.");
-                    }
-                }
-
-                if (players.Count > 0 && raid.Spawned < raid.Waves && raid.InArea >= raid.NextWave)
+                if (present && raid.Spawned < raid.Waves && raid.InArea >= raid.NextWave)
                 {
-                    if (waveUp == null)
+                    int most = Mathf.Max(1, balance.RaidMaxActiveWaves);
+                    if (raid.Live.Count < most)
                     {
                         if (!SpawnWave(raid, players, balance))
                         {
@@ -241,23 +238,22 @@ namespace ValheimCreatures
                             continue;
                         }
 
-                        raid.WaveUp = true;
+                        raid.NextWave = raid.InArea + NextWaveSeconds(balance);
                         raid.HeldLogged = false;
-                        waveUp = raid;
                     }
-                    else if (waveUp != raid && !raid.HeldLogged)
+                    else if (!raid.HeldLogged)
                     {
                         raid.HeldLogged = true;
                         Plugin.Log.LogInfo(
-                            $"Raid {raid.Template.m_name} wave {raid.Spawned + 1} of {raid.Waves} is held back: " +
-                            $"wave {waveUp.Spawned} of {waveUp.Template.m_name} at ({waveUp.Position.x:0}, " +
-                            $"{waveUp.Position.z:0}) still has {Alive(waveUp)} creatures alive.");
+                            $"Raid {raid.Template.m_name} wave {raid.Spawned + 1} of {raid.Waves} is due but held back: " +
+                            $"{raid.Live.Count} of its waves are alive with {Alive(raid)} creatures, and {most} is the " +
+                            "most at once.");
                     }
                 }
 
-                if (raid.Sized && raid.Spawned >= raid.Waves && Alive(raid) == 0)
+                if (raid.Sized && raid.Spawned >= raid.Waves && raid.Live.Count == 0)
                 {
-                    Plugin.Log.LogInfo($"Raid {raid.Template.m_name} is over: all {raid.Waves} waves are dead.");
+                    Plugin.Log.LogInfo($"Raid {raid.Template.m_name} is over: all {raid.Waves} waves are defeated.");
                     Ended.Add(raid);
                 }
             }
@@ -322,29 +318,160 @@ namespace ValheimCreatures
             }
 
             raid.Spawned++;
-            raid.Creatures.AddRange(spawned);
+            Wave wave = new Wave { Number = raid.Spawned };
+            wave.Creatures.AddRange(spawned);
+            raid.Live.Add(wave);
             foreach (ZDOID id in spawned)
             {
                 Raiders.Enlist(id, raid.Position);
             }
 
             Plugin.Log.LogInfo(
-                $"Raid {raid.Template.m_name} wave {raid.Spawned} of {raid.Waves}: {string.Join(", ", names)}." +
-                WaveSpawner.Placements() + WaveSpawner.Rejected());
+                $"Raid {raid.Template.m_name} wave {raid.Spawned} of {raid.Waves}: {string.Join(", ", names)}. " +
+                $"{raid.Live.Count} of its waves are alive; the next is due in {NextWaveSeconds(balance):0} s with a " +
+                $"player in the area, sooner if these die.{WaveSpawner.Placements()}{WaveSpawner.Rejected()}");
             return true;
         }
 
-        private static Raid RaidWithWaveUp()
+        private static float NextWaveSeconds(Balance balance)
+        {
+            return Mathf.Max(30f, balance.RaidNextWaveMinutes * 60f);
+        }
+
+        private static void Prune(Raid raid, bool present, float dt, Balance balance)
+        {
+            for (int i = 0; i < raid.Live.Count; i++)
+            {
+                Wave wave = raid.Live[i];
+                Lost.Clear();
+                for (int j = wave.Creatures.Count - 1; j >= 0; j--)
+                {
+                    if (Gone(wave, wave.Creatures[j], present, dt))
+                    {
+                        wave.Creatures.RemoveAt(j);
+                    }
+                }
+
+                if (Lost.Count > 0)
+                {
+                    Plugin.Log.LogInfo(
+                        $"Raid {raid.Template.m_name} lost {string.Join(", ", Lost)} of wave {wave.Number}: beyond every " +
+                        $"player's loaded area for {LostSeconds:0} s while a player was in the raid, so they no longer " +
+                        "count toward the wave.");
+                }
+
+                if (wave.Creatures.Count > 0)
+                {
+                    continue;
+                }
+
+                raid.Live.RemoveAt(i);
+                i--;
+                raid.Defeated++;
+                WaveDefeated(raid, wave, balance);
+            }
+        }
+
+        private static bool Gone(Wave wave, ZDOID id, bool present, float dt)
+        {
+            ZDO zdo = ZDOMan.instance.GetZDO(id);
+            if (zdo == null || !Raiders.Enlisted(zdo) || zdo.GetBool(ZDOVars.s_tamed))
+            {
+                Forget(wave, id);
+                return true;
+            }
+
+            bool loaded = ZNetScene.instance.FindInstance(zdo) != null;
+            if (zdo.GetFloat(ZDOVars.s_health, 1f) <= 0f)
+            {
+                wave.Dying.TryGetValue(id, out float dying);
+                dying += dt;
+                if (!loaded || dying >= DyingSeconds)
+                {
+                    Forget(wave, id);
+                    return true;
+                }
+
+                wave.Dying[id] = dying;
+                return false;
+            }
+
+            if (loaded)
+            {
+                wave.Away.Remove(id);
+                return false;
+            }
+
+            if (!present)
+            {
+                return false;
+            }
+
+            wave.Away.TryGetValue(id, out float away);
+            away += dt;
+            if (away < LostSeconds)
+            {
+                wave.Away[id] = away;
+                return false;
+            }
+
+            Forget(wave, id);
+            GameObject prefab = ZNetScene.instance.GetPrefab(zdo.GetPrefab());
+            Vector3 position = zdo.GetPosition();
+            Lost.Add($"{(prefab != null ? prefab.name : "a creature")} at ({position.x:0}, {position.z:0})");
+            return true;
+        }
+
+        private static void Forget(Wave wave, ZDOID id)
+        {
+            wave.Away.Remove(id);
+            wave.Dying.Remove(id);
+        }
+
+        private static void WaveDefeated(Raid raid, Wave wave, Balance balance)
+        {
+            int remaining = Mathf.Max(0, raid.Waves - raid.Defeated);
+            if (remaining == 0)
+            {
+                Plugin.Log.LogInfo($"Raid {raid.Template.m_name} wave {wave.Number} of {raid.Waves} is defeated.");
+                return;
+            }
+
+            string next;
+            if (raid.Spawned >= raid.Waves)
+            {
+                next = $"the last {remaining} are already out";
+            }
+            else if (raid.Live.Count == 0)
+            {
+                raid.NextWave = Mathf.Min(raid.NextWave, raid.InArea + Mathf.Max(10f, balance.RaidWaveInterval));
+                next = $"none is alive, so the next comes in {Mathf.Max(0f, raid.NextWave - raid.InArea):0} s with a " +
+                       "player in the area";
+            }
+            else
+            {
+                next = $"{raid.Live.Count} still alive, the next due in {Mathf.Max(0f, raid.NextWave - raid.InArea):0} s " +
+                       "with a player in the area";
+            }
+
+            Plugin.Log.LogInfo(
+                $"Raid {raid.Template.m_name} wave {wave.Number} of {raid.Waves} is defeated; {remaining} waves remain, " +
+                $"{next}.");
+        }
+
+        internal static void Adopt(ZDOID parent, ZDOID child)
         {
             foreach (Raid raid in Active)
             {
-                if (raid.WaveUp && Alive(raid) > 0)
+                foreach (Wave wave in raid.Live)
                 {
-                    return raid;
+                    if (wave.Creatures.Contains(parent))
+                    {
+                        wave.Creatures.Add(child);
+                        return;
+                    }
                 }
             }
-
-            return null;
         }
 
         private static List<Vector3> PlayersInArea(Raid raid)
@@ -364,12 +491,13 @@ namespace ValheimCreatures
 
         private static int Alive(Raid raid)
         {
-            raid.Creatures.RemoveAll(id =>
+            int alive = 0;
+            foreach (Wave wave in raid.Live)
             {
-                ZDO zdo = ZDOMan.instance.GetZDO(id);
-                return zdo == null || zdo.GetFloat(ZDOVars.s_health, 1f) <= 0f;
-            });
-            return raid.Creatures.Count;
+                alive += wave.Creatures.Count;
+            }
+
+            return alive;
         }
 
         /// <summary>
@@ -417,8 +545,10 @@ namespace ValheimCreatures
             {
                 parts.Add(
                     $"{raid.Template.m_name} at ({raid.Position.x:0}, {raid.Position.z:0}) wave {raid.Spawned}/" +
-                    $"{(raid.Sized ? raid.Waves.ToString() : "?")}, " +
-                    $"{Alive(raid)} alive, comfort {raid.Comfort}, {raid.Players} players, {raid.Age / 60f:0.0} min");
+                    $"{(raid.Sized ? raid.Waves.ToString() : "?")}, {raid.Defeated} defeated, " +
+                    $"{raid.Live.Count} waves alive with {Alive(raid)} creatures, next due in " +
+                    $"{Mathf.Max(0f, raid.NextWave - raid.InArea):0} s, comfort {raid.Comfort}, {raid.Players} players, " +
+                    $"{raid.Age / 60f:0.0} min");
             }
 
             return string.Join("; ", parts);

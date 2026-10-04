@@ -104,6 +104,7 @@ namespace ValheimCreatures
                 if (Raiders.TryCenter(parent, out Vector3 center))
                 {
                     Raiders.Enlist(child, center);
+                    RaidDirector.Adopt(parent.GetZDOID(), child.GetZDOID());
                 }
 
                 if (parentAI.IsAlerted())

@@ -63,6 +63,8 @@ namespace ValheimCreatures
 
         internal static ConfigEntry<bool> RaidWaves;
         internal static ConfigEntry<float> RaidWaveInterval;
+        internal static ConfigEntry<float> RaidNextWaveMinutes;
+        internal static ConfigEntry<int> RaidMaxActiveWaves;
         internal static ConfigEntry<int> RaidMaxWaves;
         internal static ConfigEntry<int> RaidPlayerWavesMax;
         internal static ConfigEntry<int> RaidComfortPerWave;
@@ -198,14 +200,25 @@ namespace ValheimCreatures
                     new AcceptableValueRange<float>(5f, 80f)));
 
             RaidWaves = config.Bind("Raids", "Waves", true,
-                "Dedicated server only. Run raids as waves: a raid keeps going until all its waves are dead, never " +
-                "runs away on a timer, and several bases can be raided at once, one raid per base. Only one wave is " +
-                "alive at a time across the whole world. Off is vanilla.");
+                "Dedicated server only. Run raids as waves: a raid keeps going until all its waves are defeated, " +
+                "never runs away on a timer, and several bases can be raided at once, one raid per base. Raiders " +
+                "ignore wild creatures and head for the raid's centre. Off is vanilla.");
             RaidWaveInterval = config.Bind("Raids", "WaveInterval", 20f,
                 new ConfigDescription(
-                    "Seconds from the moment a wave is dead until the raid's next wave. The clock only runs while a " +
-                    "player is inside the raid's area. A wave also waits while any other raid has a wave alive.",
+                    "Seconds from the moment the raid's last live wave is defeated until its next wave, when that is " +
+                    "sooner than NextWaveMinutes. The clock only runs while a player is inside the raid's area.",
                     new AcceptableValueRange<float>(10f, 1800f)));
+            RaidNextWaveMinutes = config.Bind("Raids", "NextWaveMinutes", 2f,
+                new ConfigDescription(
+                    "Minutes from one wave appearing to the next, even if the first is still alive. The clock only runs " +
+                    "while a player is inside the raid's area. A wave that is due waits while MaxActiveWaves are alive.",
+                    new AcceptableValueRange<float>(0.5f, 30f)));
+            RaidMaxActiveWaves = config.Bind("Raids", "MaxActiveWaves", 2,
+                new ConfigDescription(
+                    "The most waves of one raid alive at once. A wave is defeated when every creature in it is dead, has " +
+                    "left the raid, or has been beyond every player's loaded area for a minute while a player is in the " +
+                    "raid.",
+                    new AcceptableValueRange<int>(1, 8)));
             RaidMaxWaves = config.Bind("Raids", "MaxWaves", 8,
                 new ConfigDescription(
                     "The most waves a raid can have. A raid has one wave per player in its area beyond the first, up to " +
