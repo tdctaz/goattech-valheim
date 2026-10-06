@@ -1,1101 +1,268 @@
 # Server Authority
 
-A dedicated-server mod for Valheim that moves world simulation off the players and onto the server.
+A Valheim mod that moves world simulation off the players and onto the dedicated server. Installed
+on the server and on every client.
 
-In vanilla, the server hands each object to whichever client is standing near it, and that client
-then simulates it for everyone. So one player's frame rate and connection decide how the area feels
-for the whole group, and when that player dies or walks away the objects go ownerless until the
-server's next two second pass finds a replacement. That pause is the hitch you feel when the "area
-host" changes.
-
-This mod replaces the rule the server uses to hand out ownership, and gives the server the loaded
-scene it needs to act on it. Ownership assignment was already a server-side decision, so that half
-needs **nothing installed on clients** and vanilla clients can connect normally.
-
-Ownership is that server-side half. The **wave synchronisation** in [Waves](#waves) is not: waves are
-never sent over the network, every machine recomputes them, and making two machines agree needs the
-same code on both. That part of the mod therefore **does** have to be installed on every player's
-game, as do [mod validation and server side characters](#mod-validation-and-server-side-characters).
-A vanilla client can still connect and play; it simply keeps vanilla's wave behaviour, and the boats
-it renders will not sit in the sea the way the server floats them.
-
-> **Status: early alpha.** Ported to Valheim **1.0.16** and now **running on a live dedicated
-> server**. Creature AI, combat, drops and item pickup are confirmed working with the server
-> owning simulation. Not yet tested with two players in one area, which is the case the whole
-> design exists for. See [Game updates](#game-updates).
+In vanilla the server hands each object to whichever client is near it, and that client simulates
+it for everyone. One player's frame rate and connection decide how an area behaves for the whole
+group, and when that player dies or walks away the objects go ownerless until the server's next two
+second pass finds a new owner. That pause is the hitch felt when the "area host" changes.
 
 ## What it does
 
-The server owns and simulates everything around every player, all the time. Creature AI, spawning,
-physics, damage and the timers on smelters and crops all run on the server, so no player's machine
-or connection decides how an area behaves for anybody else, and nothing hitches when a player dies
-or walks away.
+- The server owns and simulates everything around every player: creature AI, spawning, raids,
+  physics, damage, and the timers on smelters, fermenters and crops. Nothing is handed back to a
+  client when they are alone.
+- The server runs at 60 frames per second instead of the 30 Valheim hardcodes, and sends each player
+  object updates at a steady rate however many are online.
+- Boats are simulated by the server even while somebody steers, so everyone aboard gets the same
+  hull physics.
+- Wind, waves and the water clock are made the same on every machine, so a boat sits in the sea the
+  way the server floats it.
+- Vanilla code that assumes the owner of an object is a player's machine is fixed where it broke.
+  See [Vanilla code that assumes a client owner](#vanilla-code-that-assumes-a-client-owner).
+- Optional: refuse clients that do not run the same mods, keep characters on the server, and
+  accept commands from the [server tool](../valheim-server-tool/README.md).
+- Achievements count on a Server Authority server, which BepInEx otherwise prevents.
 
-There is no partial mode. An earlier design handed a sector back to a lone player after a delay, on
-the theory that a solo player should keep vanilla latency. It was dropped, because every serious bug
-this mod has produced was an ownership **transfer** rather than a simulation problem, and a design
-whose whole purpose is moving ownership to the server should not also be moving it back. The code is
-in git history if that reasoning ever needs revisiting.
+The client half is required. It publishes state only a player's own machine has, receives the
+credits, launches and keys the server earns on a player's behalf, and computes the same sea as the
+server. The GoatTech release turns on mod validation, so a client without it is refused.
 
-Some things still belong to clients, and always will:
+### What stays with clients
 
-- **Player characters.** Never reassigned, at all. A body simulated by the server rubber-bands.
-- **Mounts and carts.** Continuous input, so a server-owned animal answers a full round trip late.
-  The user holds a lease on it; once they let go it reverts to the server.
+- **Player characters.** Never taken. A body simulated elsewhere rubber-bands.
+- **Mounts and carts** while in use. The user holds a lease; when they let go it returns to the
+  server.
+- **A fish on the line**, leased to the fisher while their float names it as the catch.
+- **A loaded catapult**, leased to the loader for 6 seconds so the shot fires.
+- **Anything a player is using.** The policy never takes a ZDO whose `InUse` flag is set while its
+  owner is connected, and leaves anything a connected client has just claimed alone for 3 seconds,
+  covering the gap before the flag arrives. Otherwise a chest snaps shut about a second after it
+  is opened.
 
-  **Ships are no longer in this list.** The server owns a boat even while somebody is steering it,
-  because that is the only way every passenger gets the same hull physics rather than whatever the
-  driver's connection happens to feel like. The rudder does answer a round trip late, and that was
-  judged worth it. `Vehicles.KeepShipOwnedByDriver` hands a crewed boat back to its driver and
-  exists as a fallback for when server simulation of a ship misbehaves, not as a tuning knob.
-- **A fish on the line.** Its escapes and its fight run on whoever owns it, so the fisher holds a
-  lease on it while one of their floats names it as the catch, and it reverts to the server once
-  it is caught, lost or the line breaks.
-- **A loaded catapult.** Only the machine that loaded it knows how much it fires, so the loader
-  holds a short lease on it from loading, long enough for the shot.
-- **Anything a player is actively using.** The policy never takes a ZDO whose `InUse` flag is set
-  while its owner is still connected. Valheim already uses that flag as its own "somebody is
-  interacting with this" convention, so this covers chests, ship cargo and cart inventories at once.
+Ship cargo and cart inventories share their vehicle's ZDO, so opening one hands the whole boat or
+cart to that client until the panel closes. Splitting the two would mean patching
+`Container.RPC_RequestOpen`, which once crashed a live server (see
+[Patching RPC methods](#patching-rpc-methods)).
 
-That last rule is load-bearing, not a nicety. `InventoryGui` hides the container panel the moment
-`m_currentContainer.IsOwner()` goes false, so a chest whose ownership is reclaimed simply snaps shut
-about a second after you open it.
+`Vehicles.KeepShipOwnedByDriver` hands a steered boat back to its driver. It is a fallback for when
+server simulation of a ship misbehaves, not a tuning knob.
 
-The flag alone is not quite enough. Between the server granting ownership and the client writing
-`InUse` back there is roughly a 100ms window where it is not yet set, which against a two second
-policy cycle is about a one in twenty chance of the chest closing anyway. So anything a connected
-peer has just claimed is left alone for a three second grace before the policy takes it back, which
-covers the gap without patching the container RPCs. Those patches used to exist and crashed a live
-server; see `ContainerPatches.cs`.
+### Trade-offs
 
-Ship cargo and cart inventories are not separate objects. The container shares its vehicle's ZDO, so
-vanilla `Container.RPC_RequestOpen` hands the whole hull or cart to the client that opens it, and its
-physics runs on that client until the panel is closed and the policy takes it back. That is accepted
-rather than fixed, because the only way to split the two is to patch the RPC that crashed the server.
+- **Everyone gets the server's latency.** Melee, interactions and steering a boat cost a round trip
+  to the server. On a nearby server this is a clear win; on a distant one the player who would have
+  been the area host feels it.
+- **The server does real work.** It loads terrain and instantiates objects around every player, and
+  pays the physics, pathfinding and AI for all of it. Give it real CPU and memory. Raising the frame
+  rate from 30 to 60 took one player at simulation distance 2 from 36% to 73% of a core.
+- **The server sends more.** See [Object updates](#object-updates) for the upload it needs.
+- **Clients can still grab an object** when they interact with it, since
+  `ZNetView.ClaimOwnership` is client side. The policy takes it back after the 3 second grace, on
+  its next two second pass.
 
-Boats are simulated by the server throughout, crewed or not, so a hull behaves the same for
-everybody aboard and drifts and takes damage on one machine rather than on whichever client happens
-to be nearest. Setting `Ownership.ServerOwnsWaterborne` to false leaves an unmanned hull with the
-nearest client instead, which is what vanilla does.
+## Installing
 
-A server-owned hull needs the water under it to exist, and on a server that is not a given. See
-[the hull water gate](#a-server-owned-hull-needs-its-neighbourhood).
+The GoatTech release zips are the normal way; see `release/server/README.txt`. By hand: install
+[BepInExPack_Valheim](https://thunderstore.io/c/valheim/p/denikson/BepInExPack_Valheim/) 5.4.2350 or
+later on the dedicated server (Steam app 896660) and on every client, and put `ServerAuthority.dll`
+in `BepInEx/plugins/` on both. Older packs shipped a `start_server_bepinex.sh` that set Doorstop 3
+variables for a Doorstop 4 library, and the server starts with no BepInEx at all.
 
-## Trade-offs worth knowing before you run it
-
-- **Melee hit registration moves to the server for everyone in a contested area.** Instead of one
-  player having zero latency and everyone else having that player's connection, everybody has the
-  server's. On a LAN or a nearby VPS this is a clear win. On a 150ms+ server it can feel worse than
-  vanilla for the player who would have been the area host.
-- **Steering a boat costs a round trip.** The server simulates a ship even while somebody is at
-  the rudder, so the driver's input takes a full round trip to take effect. This was tested and
-  judged acceptable, because the alternative gives every passenger the driver's connection instead.
-  The test was on a loopback connection, so if it feels wrong on a high latency server that is what
-  `Vehicles.KeepShipOwnedByDriver` is for.
-- **The server does real work now.** It loads terrain and instantiates objects around **every**
-  player, so memory cost is roughly "one client's working set per player", and it pays the
-  simulation cost, physics and pathfinding and AI, for all of it. Give the machine real CPU and RAM.
-- **The server sends more.** Every player's updates come from the server, at a higher rate and with
-  a bigger window than vanilla allows. See [Object updates](#object-updates) for the upload it
-  needs.
-- **Clients can still grab individual objects** when they interact with them, because
-  `ZNetView.ClaimOwnership` is client-side and cannot be prevented without a client mod. The policy
-  reclaims those within two seconds and it causes no visible glitch.
+The server log should say `Server Authority active. Ownership mode: Always.` The mod warns at startup
+when the game version differs from the one it was verified against (1.0.16).
 
 ## Configuration
 
-Written to `BepInEx/config/valheim.server_authority.cfg` on first run.
+Written to `BepInEx/config/valheim.server_authority.cfg` on first run. Mod validation and characters
+are configured on the server only. Settings marked *debug* exist only in a
+[debug tools build](#debug-tools).
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| `Ownership.Mode` | `Always` | `Always` simulates server side; `Vanilla` leaves ownership alone, for isolating whether a problem is this mod. |
-| `Ownership.ServerOwnsWaterborne` | `true` | Let the server own boats and floating objects. See above. |
+| `General.Enabled` | `true` | Master switch. |
+| `General.RequireDedicatedServer` | `true` | Only activate on a dedicated server. |
+| `Ownership.Mode` | `Always` | `Vanilla` leaves ownership alone, to isolate whether a problem is this mod. |
+| `Ownership.ServerOwnsWaterborne` | `true` | Let the server own boats and floating objects. Off gives an unmanned hull to the nearest client, as vanilla. |
 | `Performance.MaxObjectsCreatedPerFrame` | `100` | Lower if the server stutters, raise if players outrun object loading. |
-| `Performance.ZoneEvictionsPerTick` | `0` (auto) | How many expired zones may unload per tick. |
-| `Performance.ServerFrameRate` | `60` | Valheim hardcodes 30. See [Responsiveness](#responsiveness). |
-| `Performance.ZdoSendRate` | `20` | How many times per second each player is sent the objects that changed around them. See [Object updates](#object-updates). |
-| `Performance.FairZdoSending` | `true` | Serve every player at `ZdoSendRate` however many are online. Off restores vanilla's one player per frame, whose rate falls as players join. |
-| `Performance.FollowLivePlayerPosition` | `true` | Load, simulate and send around each player's character as it is now, not where the client last reported it up to two seconds ago. |
-| `Performance.ZdoSendWindowMaxKiB` | `64` | Cap on object data in flight to one player. The window is sized per player from ping and Steam rate. `10` is vanilla. |
-| `Performance.SteamSendRateKiB` | `384` | The fixed rate Steam paces each player's connection at. `0` keeps vanilla's 150. Needs upload for every player at once. |
-| `Performance.ClearTeleportGhosts` | `true` | Fixes players seeing a frozen copy of someone at the portal they just used. |
-| `Vehicles.KeepShipOwnedByDriver` | `false` | Fallback only. On hands a steered boat back to its driver; the server owning it is the intended state. |
-| `Vehicles.KeepVehiclesOwnedByUser` | `true` | Same for mounts and carts. Leave this on. |
-| `Vehicles.HoldHullsUntilWaterLoads` | `true` | Leave this on. Off reproduces moored boats jumping when their physics activates. |
-| `Vehicles.RequireLoadedAreaForWaterborneOwner` | `true` | Only matters when `ServerOwnsWaterborne` is off. Leave this on. |
-| `Waves.DeterministicWind` | `true` | Derive wind from world time so every machine computes the same sea. Must match on server and clients. See [Waves](#waves). |
-| `Waves.AlignRenderedWaterWithPhysics` | `true` | Draw the sea at the moment boats float on it. See [Waves](#waves). |
-| `Waves.ServerWeatherFollowsPlayers` | `true` | Resolve the server's global weather at a player rather than the world origin. Server side only. With per-position weather on, only the few things that still read the global follow it. |
-| `Waves.ServerWeatherPerPosition` | `true` | Give everything the server simulates the weather at its own position: spawners, rain wear, fires, cinders, windmills, fish, wisp torches, and the wind and waves under every hull, floating object and leviathan. A raid's weather stays inside the raid. Server side only. See [One weather for the whole world](#one-weather-for-the-whole-world). |
-| `Waves.BlendedWeatherWind` | `true` | Draw the wind strength that sets wave height from a blend of the weather that is a function of position and world time, the same on every machine, instead of from each machine's own weather transition. A ship's owner writes the range it used onto the ship so everyone aboard matches the hull exactly. Only the wind changes. Must match on server and clients. See [Wave strength blended in space and time](#wave-strength-blended-in-space-and-time). |
-| `Waves.LevelShipWaterline` | `true` | Lay a boat's waterline patch on the sea instead of nailing it to the hull, and put the foam ring and the flat sheets of the speed wake on the surface instead of leaving them frozen at the height the hull had when they were emitted. Bow spray and rudder churn are left alone. Client side, looks only. |
-| `Waves.ShipFoamSpread` | `0.75` | How far, in metres, each foam particle reads the sea away from its own position, so the ring and the wake are not rigid sheets. Scales itself with the weather. 0 restores the perfectly conformal version. |
-| `Waves.ShipFoamLift` | `0.07` | How high, in metres, a foam particle may sit above the surface, fixed for its life and different for each one. The part that does not depend on the weather. |
-| `Waves.ShipWakeTrailSeconds` | `0` | Caps how long a boat's wake foam may live, in seconds. Off by default: it shortens the wake without thinning it, which turned out not to be the fault. A tuning lever, kept because a shorter wake is a reasonable thing to want. |
-| `Waves.ShipWakeSink` | `0.35` | How deep, in metres, the deepest particle of a boat's wake sits below the surface, fading toward a quarter opacity with depth. Restores the scatter through the surface that vanilla got from the hull's heave. The waterline ring is not affected. |
-| `Debug.LogShipDamage` | `true` | One line per hit a boat takes, with its `HitType`. Leave on; boats are hit rarely. |
-| `Debug.WaveSyncIntervalSeconds` | `5` | Logs the three inputs the sea is built from, on server and client alike, only while a boat exists. Compare two logs on the `second=` key. |
-| `Debug.ForceEnvironment` | empty | Debug tools build only. Pin the weather to one environment, such as `ThunderStorm`. Must be set identically everywhere or it *creates* a desync. |
-| `Debug.LogOwnershipChanges` | `false` | Debug tools build only. Logs every takeover and handback. Noisy. |
-| `Debug.StatusIntervalSeconds` | `0` | Periodic "simulating N sectors" line. Start with `60`. |
-| `Debug.PerformanceReportSeconds` | `600` | One line per interval with the server's average frame rate, lowest ten second average, worst frame, and how many zones, objects and creatures it holds. Leave on. |
-| `Debug.SlowFrameRateWarning` | `20` | Warn when the server averages fewer frames per second than this over ten seconds. The warning lists the creatures nearest each player and the most common instantiated objects, so the cause of lag can be read afterwards. At most one a minute. |
-| `Debug.HitchWarningMilliseconds` | `500` | Give the same warning when a single frame takes longer than this. |
-| `Debug.NetworkSaturationWarning` | `50` | Warn when at least this share of the sends to a player fell behind or were held back over ten seconds. See [Reading the network report](#reading-the-network-report). |
-| `Debug.LogNearestWaterOnJoin` | `false` | Debug tools build only. Logs where the nearest sailable water is, for boat testing. |
-| `Debug.EnableSpawnRequests` | `false` | Debug tools build only. Testing aid, see below. Leave off outside testing. |
-| `ModValidation.Enabled` | `false` | Require clients to run the same mods as the server. See below. |
+| `Performance.ZoneEvictionsPerTick` | `0` | Expired zones unloaded per 0.1s tick. `0` is one per player; vanilla is one. |
+| `Performance.ServerFrameRate` | `60` | Valheim's dedicated server hardcodes 30. `0` leaves it alone. |
+| `Performance.ZdoSendRate` | `20` | Object update sends per second to each player. |
+| `Performance.FairZdoSending` | `true` | Serve every player at `ZdoSendRate`. Off is vanilla's one player per frame. |
+| `Performance.FollowLivePlayerPosition` | `true` | Load, simulate and send around where each character is now, not where its client last reported it. |
+| `Performance.ZdoSendWindowMaxKiB` | `64` | Cap on object data in flight to one player. Vanilla is 10. |
+| `Performance.SteamSendRateKiB` | `384` | Steam's send rate per player. `0` keeps vanilla's 150. Needs upload for every player at once. |
+| `Performance.ClearTeleportGhosts` | `true` | Fixes players seeing a frozen copy of someone at a portal they used. |
+| `Vehicles.KeepShipOwnedByDriver` | `false` | Fallback only: hands a steered boat to its driver. |
+| `Vehicles.KeepVehiclesOwnedByUser` | `true` | Leases mounts and carts to their user. Leave on. |
+| `Vehicles.HoldHullsUntilWaterLoads` | `true` | Holds a server-owned hull still until the zones under it exist. Leave on. |
+| `Vehicles.RequireLoadedAreaForWaterborneOwner` | `true` | Only matters with `ServerOwnsWaterborne` off. Leave on. |
+| `Waves.DeterministicWind` | `true` | Wind as a function of world time. Must match on server and clients. |
+| `Waves.AlignRenderedWaterWithPhysics` | `true` | Draw the sea at the moment boats float on it. |
+| `Waves.ServerWeatherFollowsPlayers` | `true` | Resolve the server's global weather at a player, not the world origin. |
+| `Waves.ServerWeatherPerPosition` | `true` | Everything the server simulates gets the weather at its own position. |
+| `Waves.BlendedWeatherWind` | `true` | Wave strength from weather blended over position and world time. Must match on server and clients. |
+| `Waves.LevelShipWaterline` | `true` | Lay a boat's waterline patch, foam ring and wake on the sea. Client side, looks only. |
+| `Waves.ShipFoamSpread` | `0.75` | Metres each foam particle reads the sea away from itself, so the foam is not a rigid sheet. |
+| `Waves.ShipFoamLift` | `0.07` | Most a foam particle sits above the surface, fixed per particle. |
+| `Waves.ShipWakeTrailSeconds` | `0` | Caps the life of wake foam. Off. |
+| `Waves.ShipWakeSink` | `0.35` | Deepest a wake particle sits below the surface, fading with depth. |
+| `Debug.LogShipDamage` | `true` | One line per hit a boat takes, with its `HitType`. |
+| `Debug.WaveSyncIntervalSeconds` | `5` | Logs the inputs the sea is built from, while a boat exists. Compare logs on `second=`. |
+| `Debug.StatusIntervalSeconds` | `0` | Periodic "simulating N sectors" line. |
+| `Debug.PerformanceReportSeconds` | `600` | Frame rate, zones, objects and creatures, and a [network report](#reading-the-network-report) per player. |
+| `Debug.SlowFrameRateWarning` | `20` | Warn when the server averages fewer FPS than this over ten seconds, listing what is near each player. At most once a minute. |
+| `Debug.HitchWarningMilliseconds` | `500` | The same warning for one frame longer than this. |
+| `Debug.NetworkSaturationWarning` | `50` | Warn when this percentage of sends to a player fell behind or were held back over ten seconds. |
+| `Debug.ForceEnvironment` | empty | *Debug.* Pin the weather, such as `ThunderStorm`. Set it identically everywhere or it causes a desync. |
+| `Debug.LogOwnershipChanges` | `false` | *Debug.* Every takeover and handback. Noisy. |
+| `Debug.LogShipState` | `false` | *Debug.* Hull height, buoyancy, zones and health. |
+| `Debug.LogNearestWaterOnJoin` | `false` | *Debug.* Where the nearest sailable water is. |
+| `Debug.EnableSpawnRequests` | `false` | *Debug.* See [Spawn requests](#spawn-requests). |
+| `ModValidation.Enabled` | `false` | Refuse clients that do not run the same mods. The release turns it on. |
 | `ModValidation.ServerOnlyMods` | empty | Server plugins clients do not need. |
 | `ModValidation.AllowedClientMods` | empty | Extra client mods to allow. `*` allows any. |
-| `ModValidation.ForbiddenClientMods` | empty | Always rejected, even with `*`. |
+| `ModValidation.ForbiddenClientMods` | empty | Always refused, even with `*`. |
 | `ModValidation.RequireSameGameVersion` | `true` | Vanilla only compares the network protocol. |
 | `ModValidation.CompareFileHashes` | `false` | Require byte-identical DLLs, not just equal versions. |
-| `Control.Enabled` | `true` | Accept commands from the [server tool](../valheim-server-tool/README.md): broadcast a message to every player, or save and quit. |
-| `Control.Directory` | empty | Where the tool drops command files. Default is `ServerAuthority-control` next to the server executable. |
-| `Characters.Enabled` | `false` | Keep characters on the server. See below. |
-| `Characters.StoragePath` | empty | Default is `characters_serverauthority` next to `worlds_local`. |
-| `Characters.NewCharacters` | `ResetToFresh` | Unknown characters start over. `Accept` and `RequireNew` are the alternatives. |
-| `Characters.StartingKit` | empty | Extra items for a fresh character, comma separated. An item name gives one, `Name:Count` gives that many, and a piece name such as `Karve` gives its materials, its crafting station's materials and the tool that builds both, read from the game's own recipes. The server logs the resolved kit at startup. |
+| `Characters.Enabled` | `false` | Keep characters on the server. The release turns it on. |
+| `Characters.StoragePath` | empty | Default `characters_serverauthority` next to `worlds_local`. |
+| `Characters.NewCharacters` | `ResetToFresh` | Or `Accept`, or `RequireNew`. |
+| `Characters.StartingKit` | empty | Extra items for a fresh character: `Name`, `Name:Count`, or a piece such as `Karve` for its materials, its station's materials and the tool. |
 | `Characters.OnInvalidUpload` | `Kick` | `LogOnly` discards a bad save without kicking. |
 | `Characters.SaveIntervalSeconds` | `300` | Extra save requests between world saves. Bounds rollback. |
 | `Characters.SyncTimeoutSeconds` | `90` | How long the character exchange at login may take. |
-| `Characters.ShutdownSaveSeconds` | `10` | How long a graceful shutdown waits for every player's final save. `0` skips the wait and rolls everyone back to their last upload. |
+| `Characters.ShutdownSaveSeconds` | `10` | How long a graceful shutdown waits for every player's final save. |
 | `Characters.RejectCheatedItems` | `true` | Items the game marked as spawned with devcommands. |
-| `Characters.RejectCheatedProfiles` | `false` | The profile-wide devcommands flag. Permanent, so off. |
+| `Characters.RejectCheatedProfiles` | `false` | The profile's devcommands flag, which is permanent. |
 | `Characters.MaxSkillLevel` | `100` | Raise if a mod raises the skill cap. |
-| `Characters.MaxSkillGainPerHour` | `0` (off) | Per skill. Start generous and watch the log. |
+| `Characters.MaxSkillGainPerHour` | `0` | Per skill. Off. |
+| `Control.Enabled` | `true` | Accept commands from the server tool: a message to every player, or save and quit. |
+| `Control.Directory` | empty | Default `ServerAuthority-control` next to the server executable. |
 
-### Spawn requests
+The effective configuration is logged at startup on server and client.
 
-Only in a [debug tools build](#debug-tools). With `EnableSpawnRequests` on, the server watches `BepInEx/config/serverauthority_spawn.txt` and
-spawns what it lists next to the first connected player, one `PrefabName Count` per line, then
-empties the file. A third word `tame` spawns creatures already tamed, as in `Lox 1 tame`, so a mount
-can be saddled at once. The line `water` instead re-runs the nearest water scan for that player, `diag`
-prints what the server can see of the water at that point, `owners` lists what the server actually
-owns around the player, by prefab name, which is how you confirm a thing is really being simulated
-server side rather than assuming it, and `hulls` prints for every instantiated ship the five points
-it measures the water at, which zone each falls in, whether that zone exists, and whether buoyancy
-will therefore be on or off. `event army_bonemass` starts that random event on the player, as the
-console command does but without devcommands flagging the character, and `event stop` ends it.
-See [Reproducing the hull water fault](#reproducing-the-hull-water-fault).
+## Mod validation
 
-This exists because testing a cart needs bronze nails and testing a boat needs a shoreline, and
-neither is reachable quickly on a fresh world. It is also the only route available: on a dedicated
-server `Terminal.IsCheatsEnabled()` returns `ZNet.instance.IsServer()`, which is false on every
-client, so `devcommands` and `spawn` cannot be used from a connected client no matter who is admin.
+On connecting, the client sends a manifest: its protocol version, Valheim version, every BepInEx
+plugin with its version and the SHA-256 of its DLL, and a hash of the local character file. The
+server checks it when vanilla admits the peer (`ZRoutedRpc.AddPeer`, the last call of
+`ZNet.RPC_PeerInfo`) and kicks a failing client through `ZNet.InternalKick`. With validation or
+characters on, a client without the mod is kicked; vanilla shows that as a plain "kicked", while a
+client with the mod sees the reason.
 
-It is a cheat hook whose only authentication is filesystem access to the server. Leave it off
-except while testing.
+Every server plugin is required on the client at the same version, except `ServerOnlyMods`. A client
+plugin the server lacks is refused unless listed in `AllowedClientMods`. This stops mismatched
+installs and casual cheating, not a determined cheater: the manifest is whatever the client says.
 
-### Seed for a new world
+## Server side characters
 
-The dedicated server always gives a new world a random seed and has no option to choose one. Server
-Authority adds one: start the server with `-seed <seed>` and a world created on that start gets it.
-An existing world is not touched. The [server tool](../valheim-server-tool/README.md) always passes the
-world name, so a world's seed is its name.
+The server stores one character per world at
+`characters_serverauthority/<world>/<platform id>/<name>.fch`, the name lowercased, in the game's own
+format. Each save goes to `.fch.new` and is renamed over the `.fch` after the old one is copied to
+`.old`. If the `.fch` is missing or unreadable, loading falls back to `.new`, then `.old`, and keeps
+an unreadable file as `.fch.unreadable`. To reset a character, delete the `.fch` and any `.old` and
+`.new` beside it.
 
-## Mod validation and server side characters
+- **Known character.** The server's copy replaces the local one, which is first backed up as
+  `characters_local/<file>_backup_serverauthority-<yyyyMMdd-HHmmss>.fch`. A "Server:" chat line says
+  so. Anything changed offline or earned in another world is gone.
+- **Unknown character.** With `ResetToFresh` the server builds a fresh character keeping only the
+  name, id and appearance, the client backs up its file and installs it, and the player enters with
+  the Valkyrie intro. `Accept` takes the character as it is, subject to the checks below.
+  `RequireNew` refuses one that has entered a world, trained a skill or earned trophies or powers.
+- **While playing.** Every save is uploaded in 256 KB chunks. The server asks for a save at each
+  world save and every `SaveIntervalSeconds`. A failing upload is discarded and, with `Kick`, the
+  player returns as the last good copy.
 
-Both features are configured on the server only. The client's own copy of these settings does
-nothing. Either one makes the client mod mandatory: a client without it is kicked, and vanilla
-shows that as a plain "kicked". A client with the mod is shown the actual reason.
+An upload is checked for the name, the id against the stored copy, items that exist in `ObjectDB`
+with stacks and quality within limits, items marked as spawned with devcommands, skills within
+`MaxSkillLevel`, and optionally skill gain per hour and the profile's devcommands flag. If a game
+update moves the player data past version 33, which `PlayerDataSummary` mirrors from `Player.Save`,
+items and skills go unchecked with a warning. The client still simulates its own character, so a
+modified client can report invented gear as long as it is plausible.
 
-### How a connection is checked
-
-On connecting, the client mod sends a manifest: its Server Authority protocol version, Valheim
-version, every loaded BepInEx plugin with its version and a SHA-256 of its DLL, and a hash of the
-local character file. The server checks it when vanilla admits the peer, at `ZRoutedRpc.AddPeer`,
-which is a plain call at the end of `ZNet.RPC_PeerInfo`. Nothing here patches an RPC method, for
-the reason given under [Patching RPC methods can kill the server](#patching-rpc-methods-can-kill-the-server).
-A failing client is kicked through vanilla's own `InternalKick`.
-
-Every plugin on the server is required on the client at the same version, except those listed in
-`ServerOnlyMods`. A client plugin the server does not have is rejected unless it is listed in
-`AllowedClientMods`.
-
-**This stops mismatched installs and casual cheating, not a determined cheater.** The manifest is
-whatever the client says it is. Anyone willing to edit the client mod can report any mod list they
-like. No design can prevent that without a client the server can attest to, and Valheim has none.
-
-### How characters are kept
-
-The server stores one `.fch` per character, per world, at
-`characters_serverauthority/<world>/<platform id>/<name>.fch`. It is the game's own character file
-format, so an admin can copy one into a client's `characters_local` folder to inspect it. The
-previous copy is kept as `.old`. To reset a character, delete its `.fch` together with any `.old`
-and `.new` beside it, because a missing `.fch` is otherwise recovered from those.
-
-Each save is written to `<name>.fch.new` and flushed to disk, the current file is copied to `.old`,
-and the new file then replaces the `.fch` in a single rename, so a crash at any point leaves a
-complete `.fch` behind. If the `.fch` is missing or unreadable anyway, loading falls back to
-`.new`, which is always the newer when it exists, and then `.old`, taking the first that passes the
-file's own hash check and decodes as a character. It writes that back as the `.fch` and logs a
-warning naming the file it used. An unreadable `.fch` is kept
-aside as `.fch.unreadable`. Without this, a crash at the wrong moment made the server treat a known
-player as new, and `ResetToFresh` then wiped them while the good copy sat next to it.
-
-- **Login with a known character.** The server sends its copy and the client uses it instead of
-  its local file. Spawning is held until it arrives. If the local file differed, it is backed up
-  first as `characters_local/<name>_backup_serverauthority-<time>.fch`, also for characters kept in
-  Steam Cloud, which the game's Manage Saves menu lists, and
-  a "Server:" line in chat, shortly after the arrival shout, tells the player their character was
-  restored. This is the reset: gear, skills or progress
-  edited offline, or earned in another world, are gone on the next login.
-- **Login with a character the server has never seen.** By default it starts over. The client sends
-  its local copy, and the server builds a fresh character from it that keeps only the name, id and
-  appearance: starting gear and health, no skills, recipes, trophies, powers, map or spawn points.
-  The client backs up its local file, installs the fresh character, and sends it back, and the
-  server stores it only if its player data is byte for byte what the server built. The player then
-  enters with the Valkyrie intro. `Accept` instead takes the character as it is, subject to the
-  checks below, and `RequireNew` refuses any character that has already entered a world.
-- **While playing.** Every save the client makes is uploaded, in 256 KB chunks because Steam caps a
-  single message at 512 KB and an explored map easily exceeds that. The server already asks every
-  client to save at each world save, and additionally every `SaveIntervalSeconds`. Each upload is
-  checked, stored if it passes, and otherwise discarded and the player kicked, so they return as
-  the last good copy.
-
-An upload is checked for: the same character name and id as the server's copy, items that exist in
-the server's `ObjectDB` with stacks and quality within that item's limits, items the game marked as
-spawned with devcommands, skills within `MaxSkillLevel`, and optionally skill gain per hour. The
-server reads the player data format itself. The name, id and devcommands flag are always checked.
-If a game update moves the player data to a newer version than the mod reads, the items and skills
-go **unchecked** with a warning in the log rather than kicking everybody. An older version, or player
-data that cannot be read, is rejected: a current client always saves the current version, so only
-a stale or hand-edited file arrives that way, and the player is told to load it once in single
-player. `PlayerDataSummary` mirrors `Player.Save` at player data version 33, so re-read that method
-after a game update.
-
-What it cannot catch: the client still simulates its own character, so a modified client can
-report gear it picked up legitimately and gear it invented identically, as long as both are
-plausible. What the server copy guarantees is that a character cannot be changed while it is away
-from the server, and cannot carry impossible items or skills while it is here.
-
-Logging out or quitting waits for the server to confirm it stored the final save, for up to ten
-seconds, before the game is allowed to disconnect. That wait is necessary: Valheim closes its Steam
-connection without lingering, which discards anything still queued, and in testing the logout save
-never arrived without it, so every logout lost the progress since the last periodic upload.
-
-The wait happens inside a `Game.Shutdown` prefix, which both logging out and quitting pass through,
-by pumping the connection by hand until the acknowledgement arrives. It cannot be done
-asynchronously: deferring the quit through `Application.wantsToQuit` was tried and left a black
-screen, because `Game.OnApplicationQuit` still runs and tears the game down in the same frame, and
-nothing is left running to finish the quit afterwards. The game's own save during shutdown is
-skipped once the final save is confirmed, so the local file stays identical to the server's copy and
-the next login does not see a difference.
-
-A graceful server shutdown does the same from the other side. Vanilla's shutdown saves the world
-and then disconnects every player in the same frame, closing each Steam connection without
-lingering, and never asks the clients to save first, so every restart rolled every online player
-back to their last upload. The server now asks each synced player to save from the same
-`Game.Shutdown` prefix, which a dedicated server reaches from `Game.OnApplicationQuit` on Ctrl+C or
-`SIGTERM`, before anything is torn down. It pumps the connections by hand until every player's
-upload has arrived or `ShutdownSaveSeconds` runs out, and logs per player whether their final save
-was stored. The world is saved after the wait, so it matches the characters. Anything that stops
-the server must allow for the wait: `docker stop` sends `SIGKILL` after 10 seconds by default, so
-give it `-t 30`. A player whose upload was already on its way when the server asked is counted by
-that upload, which is at most a round trip older than the request.
-
-A crash, a kill, or a dropped connection still rolls a character back to its last upload, at most
-`SaveIntervalSeconds` old, while the world keeps whatever was put into chests since. That can
-duplicate items. Vanilla has the same exposure, bounded by its much longer world save interval.
+Logging out or quitting waits up to ten seconds, inside a `Game.Shutdown` prefix, for the server to
+confirm the final save, because Valheim closes its Steam connection without flushing. A graceful
+server shutdown (Ctrl+C or SIGTERM) likewise asks every player to save and waits up to
+`ShutdownSaveSeconds` before saving the world. Anything that stops the server must allow for this,
+for example `docker stop -t 30`. A crash or a dropped connection rolls a character back to its last
+upload, while chests keep what was put in since, which can duplicate items; vanilla has the same
+exposure over its longer save interval.
 
 ## Achievements
 
-Vanilla gives no achievements at all to a game with BepInEx installed. `Achievements.IsCheatedAtAll`
-counts `Game.isModded` as cheating, and the BepInExPack Valheim loader sets that flag on every
-modded install, whatever the mods do. While the game counts as cheated, `PlayerProfile` keeps only
-the raw stats and skips the stats achievements read, so nothing accumulates toward one either. On
-the GoatTech server every character had full raw stats and nothing at all in the achievement
-stats, the Elder kill included.
-
-A client connected to a Server Authority server ignores the modded flag for that one check. The
-flag is lowered only while `IsCheatedAtAll` runs and restored straight after, so the "modded" text
-in the main menu and the `isModded` log line stay as Iron Gate asked. Every other reason the game
-withholds achievements still applies: a character that used devcommands, an item spawned with them,
-and world modifiers the game counts as cheats. Single player and player-hosted games are untouched,
-because the client only learns it is on a Server Authority server from the server's answer to its
-manifest.
-
-Cheat commands are unaffected. A client on a dedicated server cannot run them at all, because
-`Terminal.IsCheatsEnabled` requires `ZNet.IsServer`. An admin's command is sent to the server, which
-checks `adminlist.txt`, logs `Remote admin '<id>' executed command`, and runs it in its own console,
-where the flag is never lowered. Items spawned that way still carry the game's cheated mark, which
-`RejectCheatedItems` refuses. On the client the same check also picks the stats slot for the maximum
-comfort, building height and days survived counters, so those start from zero.
-
-Progress made before this is not counted, because the game never recorded it. Each player's log
-says at spawn whether achievements are allowed in the session, and if not, why. A later respawn
-repeats it only if the answer changed.
-
-## Building
-
-Needs the .NET SDK and a Valheim install (client or dedicated server, either has the assemblies).
-
-```bash
-dotnet build src/ServerAuthority/ServerAuthority.csproj -c Release
-```
-
-The game path is found automatically under the usual Steam locations. Override it with
-`VALHEIM_MANAGED=/path/to/valheim_server_Data/Managed`. The output is
-`src/ServerAuthority/bin/Release/ServerAuthority.dll`.
-
-Set `VALHEIM_PLUGINS` to a BepInEx plugins folder and each build deploys itself there.
-
-### Debug tools
-
-A plain build leaves out every debug option and testing tool, and is the one to distribute:
-`Debug.LogOwnershipChanges`, `Debug.LogShipState`, `Debug.LogNearestWaterOnJoin`,
-`Debug.ForceEnvironment` and `Debug.EnableSpawnRequests` with its spawn requests. Their settings are
-not even written to the config file. The diagnostics meant to be running when something goes wrong,
-`Debug.LogShipDamage`, `Debug.WaveSyncIntervalSeconds`, `Debug.StatusIntervalSeconds` and the
-performance and network reports and warnings, stay in.
-
-For testing, build with them:
-
-```bash
-dotnet build src/ServerAuthority/ServerAuthority.csproj -c Release -p:DebugTools=true
-```
-
-The startup line listing the effective configuration says which kind of build is running.
-
-## Verifying
-
-```bash
-# Every [HarmonyPatch] target still exists and is unambiguous in the game assembly.
-dotnet run --project tools/PatchCheck -c Release -- \
-  src/ServerAuthority/bin/Release/ServerAuthority.dll \
-  ~/.local/share/Steam/steamapps/common/Valheim/valheim_Data/Managed
-```
-
-**Run `PatchCheck` after every Valheim update.** The predecessor to this mod broke on nearly every
-game patch because it rewrote game methods with IL transpilers that matched silently and then
-stopped matching. This mod replaces whole methods instead and `PatchCheck` is the cheap half of
-re-verifying it. The expensive half is re-reading the replaced methods against a fresh decompilation;
-`RESEARCH.md` lists which ones and why.
-
-## Stability so far
-
-One unattended run of 4 hours 22 minutes on Linux, ending in a clean shutdown: no exceptions, no
-assertions, no fatal signals, 132 completed world saves. Object counts returned to zero when the
-last player disconnected, so the server unwinds its scene rather than accumulating, which is the
-failure the predecessor mod was best known for.
-
-That run was mostly idle, so it demonstrates the absence of a slow leak rather than stability under
-load. The one crash observed to date took about an hour of ordinary play to trigger and is described
-under [Patching RPC methods can kill the server](#patching-rpc-methods-can-kill-the-server).
-
-## The test rig
-
-`tools/testserver/` holds the two scripts used to exercise this against a real dedicated server.
-Copy them into the server directory and run the watchdog.
-
-`start_server_authority_test.sh` launches a private server with `-saveinterval 120` instead of the
-default 1800. A crash loses everything since the last save, and this mod has crashed a server, so
-two minutes of exposure beats thirty.
-
-It also points `XDG_CONFIG_HOME` at `server_config/` inside the server directory. Without that, a
-dedicated server on the same Linux account as a game client shares
-`~/.config/unity3d/IronGate/Valheim` with it, and so shares the Unity preferences file the Steam
-client keeps its settings in. The server loads that file at startup and writes its copy back on
-shutdown, so restarting the server after the client quits silently resets the client's graphics,
-key bindings and audio. The world and the admin lists move with it, into
-`server_config/unity3d/IronGate/Valheim/`.
-
-`watchdog_authority_test.sh` restarts the server when it dies and keeps the evidence. This matters
-more than it sounds: a Mono abort terminates the process rather than raising an exception, so a
-crash produces no error in the log, just silence followed by nothing. The watchdog gives each run
-its own log, and on an abnormal exit copies it aside as `CRASH-<time>-exit<code>.log` with a
-summary of the exceptions, assertions and fatal signal that preceded it.
-
-Watching the log for exceptions is not sufficient monitoring on its own. A clean log meant a healthy
-server right up until the run that died, and the thing that killed it never logged an error at all.
-
-## Trying it
-
-Install the Valheim Dedicated Server (Steam app 896660), then install
-[BepInExPack_Valheim](https://thunderstore.io/c/valheim/p/denikson/BepInExPack_Valheim/) into it and
-drop `ServerAuthority.dll` into `BepInEx/plugins/`. Launch with `start_server_bepinex.sh`.
-
-Use a recent BepInEx pack. Releases before 5.4.2350 shipped a `start_server_bepinex.sh` that still
-set Doorstop 3 variables (`DOORSTOP_ENABLE`, `DOORSTOP_INVOKE_DLL_PATH`) while bundling a Doorstop 4
-library that reads `DOORSTOP_ENABLED` and `DOORSTOP_TARGET_ASSEMBLY`. The symptom is a server that
-starts perfectly and simply has no BepInEx in its log.
-
-On startup the log should say `Server Authority active`. Set `Debug.StatusIntervalSeconds = 10` for
-the first session and watch the simulated sector and object counts track where players actually are.
-
-**Testing with one player** exercises everything: the server owns your surroundings from the moment
-you connect, so a solo session is a real test rather than a special case.
-
-What to check first, in rough order of how likely it is to be wrong:
-
-1. Creatures move, attack and path normally with two players in one area.
-2. Nothing rubber-bands, especially the players themselves.
-3. Sailing still feels responsive, and an abandoned boat still drifts and takes damage. Then run
-   [Reproducing the hull water fault](#reproducing-the-hull-water-fault), which is the one test here
-   that has a deterministic trigger.
-4. Raids actually spawn creatures rather than just playing the horn.
-5. Smelters, kilns, fermenters and crops keep progressing.
-6. Server memory is flat across a few hours rather than climbing.
-
-### Reproducing the hull water fault
-
-A moored boat destroying itself as somebody walks towards it is a load-order race, so a run that
-does not provoke it proves nothing. This makes it deterministic and gives it a read-out.
-
-With a [debug tools build](#debug-tools), set `EnableSpawnRequests`, `LogShipState` and `LogNearestWaterOnJoin` on, and
-`StatusIntervalSeconds = 10`.
-
-1. Sail out and moor three or four boats, spread over a couple of hundred metres so they land in
-   different zones. Zone boundaries fall at `x = 32 + 64k` and the same in z, and a longship's float
-   collider is 8 by 17 metres, so a hull moored across a boundary is guaranteed to sample the zone
-   next door. Roughly a third of arbitrarily moored hulls do anyway.
-2. **Disconnect every player and wait a minute.** With nobody online the server empties both object
-   lists and lets every zone expire, so the whole neighbourhood is torn down. Reconnecting then
-   rebuilds it from cold at one zone per 0.1s tick, which is the widest the window ever gets. This is
-   the trigger; walking in from a distance is the same thing, only smaller and luckier.
-3. Reconnect, and write `hulls` into `BepInEx/config/serverauthority_spawn.txt` a few times over the
-   first ten seconds, then once more after a minute.
-
-What the log should show, with the fix on:
-
-- `hulls` reporting at least one hull with a `MISSING` zone and `water -10000.00` at one of its five
-  points. **If no run ever shows that, the test has not fired and says nothing about the fix.**
-- `Holding ship <id>` for that hull, then `Releasing ship <id>` once its zones arrive.
-- `LogShipState` lines keeping `y` at the waterline and `health=100%` throughout.
-
-Then set `Vehicles.HoldHullsUntilWaterLoads = false`, restart, and do the same thing again. The same
-mooring on the same world should now show `buoyancy OFF`, `y` falling frame by frame, `upY` going
-negative as it rolls, and `health` dropping until the boat is gone. That is the A/B: without it, a
-clean run is indistinguishable from a run where nothing happened.
-
-Two things must **not** change either way, since they are what the gate could plausibly break:
-
-- Sailing a crewed boat never logs `Holding ship`. The driver owns the hull, so the gate is not
-  supposed to look at it at all.
-- A beached hull still settles onto the ground rather than hovering. Out of the water reads -10000
-  too, and falling is the right answer there; the gate asks about zones, not about water, exactly so
-  that this keeps working.
-
-### Logging what damages a boat
-
-`Debug.LogShipDamage`, on by default, because the investigation above spent a day inferring a damage
-source that `HitData` could have named in one line. Two hooks, and the second exists because the
-first was not enough:
-
-- `WearNTear.ApplyDamage` reports each hit with its `HitType`, which separates a creature
-  (`EnemyHit`) from the hull's own collision self-damage (`Boat`, since `ImpactEffect.m_hitType` is
-  17 on a ship) from the capsize timer (`Undefined` blunt) from the Ashlands ocean from structural
-  wear (`hitData` null). **Not** `WearNTear.Damage`, which only calls `InvokeRPC("RPC_Damage")` and
-  applies nothing: a hook there records nothing on a dedicated server, as was discovered while a hull
-  was beaten from 97% to 51% health with an empty log.
-- A health watcher on `Ship.CustomFixedUpdate` reports any drop in the ZDO's health value. This
-  covers the case the first hook structurally cannot see: `RPC_Damage` runs on the ZDO's **owner**, so
-  when a client owns a hull the client subtracts the health and the server only receives the result.
-  With `ServerOwnsWaterborne` off that is every boat, which is how a hull sank to the sea floor and
-  lost 30 health without one line recorded against it.
-
-Neither can be patched on the client from here, so the watcher reports the surrounding state instead
-of a cause: owner, `upY`, height above the seabed, and whether the zones under the hull were complete.
-
-## Waves
-
-Sailing looked wrong for everybody except whoever owned the hull. The boat sat too low, the deck
-washed over, and crews described it as an open air submarine. It got worse, not better, when the
-server owned the boat, which is the mode this mod exists to make the default.
-
-Nothing about waves is sent over the network. `WaterVolume.GetWaterSurface` builds the height at a
-point out of three things: the point, `ZNet.GetWrappedDayTimeSeconds`, and the global wind `EnvMan`
-hands it. Two machines therefore agree about the sea exactly as far as those three agree. Three of
-them did not.
-
-### Wind was latched local state, not a function of world time
-
-`EnvMan.UpdateWind` derives a target from noise seeded by the whole second, which every machine
-agrees on. What it does with that target is where it goes wrong: `SetTargetWind` refuses to take a
-new one while `m_windTransitionTimer` is running, and that timer is a purely local ramp started
-whenever the previous one ended. Targets change several times per ramp, so **each machine keeps
-whichever target its own timer happened to finish on**, and nothing ever pulls two machines back
-together.
-
-Measured on the live server against a connected client, at the same second of world time:
-
-| | server | client |
-| --- | --- | --- |
-| wind direction | `(0.413, 0.911)` | `(-0.318, -0.590)` |
-| wind intensity | `0.240` | `0.067` |
-| transition state | `-1.00`, settled | `3.28`, mid-ramp |
-| wave height at a fixed probe | `-0.1972` | `-0.0549` |
-
-Opposite directions and three and a half times the amplitude. Wave height scales linearly with
-intensity and the leading wave runs along the wind, so these are genuinely different seas.
-
-Whether two machines agree is luck. Later in the same session their ramps happened to fall into
-step and the numbers matched exactly; a 0.28s offset between the two local timers is all it takes to
-put them on different targets for a full transition. That is the "fine for some players, wrong for
-others, half the time" report, and it has no fixed point to converge on.
-
-`Waves.DeterministicWind` replaces the latch with a function of world time, keeping vanilla's noise
-and vanilla's transition shape. Wind is the cross-fade between the noise evaluated at two fixed
-anchors on a grid of `m_windTransitionDuration` seconds of world time. Every machine lands on the
-same value with nothing sent.
-
-Keep vanilla's shape here: two anchors and an alpha between them, not one wind vector that turns.
-`CreateWave` takes a wave's spatial phase from the wind direction,
-
-```
-vector = -(worldPos.z * dir + worldPos.x * tangent)      // = -(worldPos . dir)
-phase  = time * waveSpeed + vector.y * waveLength
-```
-
-so the phase at a fixed point is proportional to the dot product of the position with the wind
-direction. Turning that direction slides the entire field, by an amount that grows with distance
-from the world origin. A version of this published a single interpolated wind, and 950m out a
-heading turning one radian per ten seconds moved the phase at about 3.8 rad/s against an intended
-wave speed of 0.5. The sea raced, and it was reported as the world clock having gone into fast
-forward — the clock was in fact correct to within measurement error. Cross-fading two fields that
-each hold a fixed direction has no such term, which is why vanilla does it that way.
-
-Each anchor is also evaluated once, when it first comes into use, and then held until it retires,
-the way vanilla holds a target for the length of its ramp. The vegetation and grass shaders take
-their sway phase as
-
-```
-phase = _Time * _SwaySpeed * (wind.w * 0.5 + 0.5)
-```
-
-so an anchor whose intensity moves while it is in use shifts that phase by the seconds since the
-scene loaded times the rate of change. A version of this re-evaluated both anchors every frame
-against the current weather's wind range, and whenever the weather blended into a new range the
-anchors slid with it. Ten minutes into a session, a raid's weather handing back to a thunderstorm
-moved the range from `0.10-0.30` to `0.80-1.00` over fifteen seconds, and every tree and blade of
-grass swayed at about twenty times its speed until the blend finished. Held anchors pick a weather
-change up at the next anchor instead, ten to twenty seconds later, exactly as vanilla does. The
-noise stays a pure function of world time. With `Waves.BlendedWeatherWind` on, so is the wind range
-an anchor is scaled into (see [Wave strength blended in space and time](#wave-strength-blended-in-space-and-time)),
-so the only thing left to differ is where each machine evaluates it. With it off, the range is the
-current environment's at the instant the anchor is taken, which differs between machines until two
-periods after a weather change. If world time ever jumps by more than one anchor in a frame, both
-are rebuilt and the log says so with a `Wind anchors rebuilt` line.
-
-The two per-player overrides are kept: the edge of the world turns the wind outward for whoever
-sails into it, and Moder's power turns it to the heading of the ship the local player is on. Both are
-taken into an anchor when it is evaluated, as vanilla takes them into a target, so they swing round
-over the ordinary transition rather than turning a field that is already in use.
-
-Moder is the server's to decide for a hull the server simulates, because the hull floats on the
-server's sea. The server works out whether Moder's power is active from the players aboard (their
-status effects are in their ZDOs), takes the hull's own heading into that hull's anchor, and writes
-that exact heading to the ship's ZDO, one slot per anchor. It writes for every anchor of every hull
-it simulates, "not steered" included, whether or not it counts anyone aboard yet: a player who boards
-just before an anchor rolls over waits for the server's answer, and if the server wrote nothing
-because it had not seen them board, the wait never ended. A client aboard uses the written heading
-instead of its own. It has to be the written one, not merely the same idea: the wave phase at a point
-is proportional to the point's position dotted with the wind direction, and a client reads the
-heading from a transform that trails the server's, which far from the world origin is enough to put
-the crew's sea half a wave away from the hull's. The value is written when the anchor is taken and
-arrives a round trip later, so a client takes the anchor from its own lagged heading first and swaps
-in the server's direction when it lands, keeping the strength it took; at that moment the incoming
-anchor carries a percent or two of the blend. A `Moder heading for anchor N settled` line means the
-two differed by more than a degree.
-
-### The rendered sea ran ahead of the sea boats float on
-
-Buoyancy reads `s_wrappedDayTimeSeconds`. The shader reads `s_waterTime`. `UpdateWaterTime` adds a
-whole frame delta to the second on **every call** while pulling only five percent back toward the
-first, and `MonoUpdaters` calls it from `FixedUpdate`, `Update` and `LateUpdate` alike. It settles
-about twelve frame times ahead of the truth: a tenth of a second at 144fps, a quarter at 60, half a
-second at 30. So the boat floats on one surface and the player looks at another, by an amount that
-depends on their frame rate. Measured at `0.184` seconds on both machines at a 20ms frame time.
-
-`Waves.AlignRenderedWaterWithPhysics` ties the two together. What the smoothing was for is kept as a
-rate limit rather than a lag: the world clock is set absolutely by the server's `NetTime` message
-every two seconds, and a client whose frame rate collapsed can be seconds behind when one arrives, so
-a correction is caught up at four times real time. Unlike a lag filter that converges on exactly the
-right value and then stays there, giving a steady state error of zero.
-
-That applies only to gaps up to ten seconds. Anything larger snaps, as vanilla's own ten second
-reset does. Sleeping fast-forwards the world clock, which a client receives as a jump of ninety to a
-hundred seconds every couple of seconds. Rate limited, the water fell hundreds of seconds behind and
-then ran at four times speed for minutes after everyone woke up.
-
-### The server picked its weather for the world origin
-
-`EnvMan` resolves the current environment, and with it the `m_windMin`/`m_windMax` range wave height
-is drawn from, at the main camera's position. A dedicated server has a camera object but nothing ever
-moves it, because `GameCamera.UpdateCamera` returns as soon as it finds no local player. So the
-server drew its weather for wherever the scene left that camera. Measured once as a wind range of
-`0.10-0.30` on the server against `0.10-0.50` on a client standing in the same biome.
-
-`Waves.ServerWeatherFollowsPlayers` answers `GetBiome` and `UpdateEnvironment` from a connected
-player instead. The lowest peer id is used rather than the nearest or the first, because it is stable
-and the server's weather should not flip every time the peer list is reordered. With
-`Waves.ServerWeatherPerPosition` on, this global is only a fallback: everything the server
-simulates asks for the weather at its own position, as described next.
-
-### One weather for the whole world
-
-Vanilla resolves one weather per machine, at its camera, and everything that machine simulates reads
-it. That is correct for a client, which only simulates what is around its own player. The server
-simulates every zone around every player at once, so with one weather:
-
-- A raid on one player changed the weather for everyone. The server's active event is set whenever
-  any player is in a raid, and vanilla then applies the raid's forced environment whenever the
-  viewpoint's biome is in the raid's mask, however far away. Five raids force a weather:
-  `army_bonemass` and `blobs` (SwampRain), `army_moder` (Snow), `ghosts` (wind 0, so the sea went
-  flat and windmills stopped) and `surtlings` (`Ashrain`, which matches no environment).
-- The six weather-gated spawners (the Neck in rain, Draugr in mist, the Serpent in storms, three
-  Ashlands cinder spawners) followed one player's sky.
-- Rain wear, fireplaces, loose fires, cinders and windmills everywhere followed it too, and so did
-  the wind and waves under every hull the server floats.
-
-`Waves.ServerWeatherPerPosition` answers "what weather would a player standing here settle on"
-instead (`LocalWeather.cs`). It mirrors `EnvMan.UpdateEnvironment` and `GetBiome` with the camera
-replaced by the position: the biome sector at the point itself (sectors lie on a 12m grid, so a coast
-is resolved where it actually runs rather than per 64m zone), switched to the Ashlands or Deep North
-sector over their sea only when a heightmap under the point says so, as vanilla does. It calls
-vanilla's own `GetAvailableEnvironments` and `SelectWeightedEnvironment` so a retuned table comes
-along with a game update, and applies the overrides in vanilla's order: a forced environment or a
-forcing `EnvZone`, the debug environment, a raid, the alternate biome's forced environment (read from
-the unswitched sector, as vanilla reads it), a persistent event, an unforced `EnvZone`. A raid only
-counts where a client standing there would take it: inside the raid area by vanilla's own test, and
-with the switched sector's biome in the raid's mask. The scheduled pick is cached per switched sector
-and sea flags per weather period; the overrides are a few distance checks and are evaluated on every
-call, so a raid starting or ending takes effect at once.
-
-Where Valheim Creatures is installed with `Raids.Waves` on, it takes a raid over on the server
-before vanilla's own event is ever set there, so vanilla's raid alone would miss
-it entirely: the weather that clients see for it would never reach the server's fires, spawners or
-wind. `CreaturesRaids.cs` finds Creatures by its BepInEx GUID at runtime and binds its raid list by
-reflection, with no compile time reference either way, and `LocalWeather.RaidEnvironment` tests each
-of its raids the same way as vanilla's. Several raids can cover one position at once, on either side
-or both; a client only ever shows the one nearest to it, so the nearest to the position wins here
-too. Without Creatures installed, or with `Raids.Waves` off, this is a no-op and raids behave exactly
-as described above.
-
-The consumers are not rewritten. Each one's entry point is wrapped in a `WeatherScope`, which loads
-the position's weather into exactly the EnvMan state a client standing there would have (wet, cold,
-freezing, daylight, the current environment, the wind) and puts the global back afterwards. The
-consumer runs vanilla code unchanged, including any weather check a game update adds to it; what can
-break is the list of entry points, which `PatchCheck` verifies. Wrapped: `SpawnSystem` (for its own
-zone), `WearNTear.UpdateWear` and `UpdateCover`, `Fireplace.CheckWet` and `UpdateIgnite`,
-`Fire.UpdateFire`, `Cinder`, `Windmill.GetPowerOutput`, `Fish`, `Leviathan.FixedUpdate`,
-`WispSpawner.GetStatus`, `LuredWisp.UpdateTarget`, `Ship.CustomFixedUpdate`, and
-`WaterVolume.UpdateFloaters` per floater, which is where floating objects and swimming characters get
-their water level. The two called for every piece every second open their scope only on the calls
-that read it: `UpdateWear` for a piece owned here and past its settling time, `UpdateCover` on the
-call whose timer passes four seconds.
-
-Wind per position keeps `DeterministicWind`'s anchors (`LocalWind.cs`). The noise depends only on the
-anchor and is shared. With `BlendedWeatherWind` on, each anchor's range is the blended range at the
-position for the anchor's time, so a floater's pair is a pure function of where it is; a server draws
-no vegetation, so nothing there needs the pair held. With it off, each weather in use gets its own
-constant pair. Each ship gets its own anchors, taken once when they come into use and held, as each
-client aboard holds its own, with the range its owner published ahead for the crew and Moder's heading
-as described under [Waves](#waves).
-
-The server's global weather is now just this answer at the lowest-id player, and never takes a raid's
-weather unless that player is inside the raid. Only what still reads the global follows it: creatures
-sliding on ice, a few daylight-only effects, and the `WaveSync field` line.
-
-What it cannot see, the same as vanilla cannot: which weather a client was already in when an
-override named an environment that does not exist (the surtling raid), which is approximated by the
-scheduled weather there; and the intro cutscene. The ten second blend between weathers, which a
-client has and a position does not, is replaced for the wind by the blend described next; for
-everything else a position keeps its discrete weather. Each machine still renders the whole sea with
-one wind, so a player watching a boat from another biome sees their own biome's waves under it,
-exactly as in vanilla.
-
-**Diagnostics**, all on by default: one `Local weather for period N` line per weather period listing
-the weathers resolved and for how many biome sectors; a `Raid ... forces weather` line when a raid with
-a forced weather starts; a `Server global weather` line when the global changes; `Moder's power
-turns ship ...` and `no longer steers` on the server; the `WaveSync hull` line now names the sea it
-was measured on (`sea=hull weather=... wind1=... wind2=... moder[N]=...` on the server, `sea=global`
-plus the server's published Moder slots on a client aboard). A client line reporting `missing` for
-more than a moment while the server's reports a heading is the handoff failing.
-
-### Wave strength blended in space and time
-
-Wave height scales with wind intensity, and each anchor's intensity is vanilla's noise scaled into
-the `m_windMin`-`m_windMax` range of a weather. In vanilla that range comes from the current
-environment, which is local state: when the weather changes, or the camera crosses into another
-biome, `InterpolateEnvironment` blends the old weather's values into the new one's over
-`m_transitionDuration` (10 seconds in the shipped `EnvMan`), starting whenever that machine noticed.
-A position on the server has no such state, only its weather, so at every weather period boundary
-(every 666 seconds) and every border between weathers a hull and its crew drew wave strength from
-different numbers until the client's blend finished.
-
-`Waves.BlendedWeatherWind` defines the range instead as a function of a position and a time of world
-clock (`WindRange.cs`, arithmetic in `WindBlend.cs`):
-
-- **Transient overrides are applied unblended**: the debug and forced environments, an `EnvZone`
-  (dungeon interiors), a raid and a persistent event, at the position itself. Their start and end
-  reach each machine at a different moment (a raid's start time and position arrive by the
-  `SetEvent` RPC, with latency, and its local timer is resent and overwritten), so no blend of them
-  could be made to agree; the anchors' own ten second cross-fade turns their step into a ramp.
-- **Everywhere else the world's own weather is blended in space**, bilinearly between the four points
-  of a 32m grid around the position. Each grid point holds the weather the world gives it for the
-  period (the alternate biome's forced environment or the scheduled pick, evaluated at sea level),
-  so across a border the range ramps over one 32m cell instead of stepping. The cell is a little wider
-  than the 12m biome grid, so a staircase coast reads as one ramp.
-- **And in time**: over the first `m_transitionDuration` seconds of a weather period, from the
-  previous period's grid weathers to the new ones, in a straight line, as vanilla's own
-  interpolation does, but starting exactly at the period boundary.
-
-Each anchor's range is evaluated for the moment the anchor starts to blend in, so a machine that
-takes it a frame late still takes the same number. Fog, rain, light, sound and everything else keep
-vanilla's blend at the camera; wet, cold and daylight consumers keep the discrete weather.
-
-**Where it is evaluated.** A client not aboard a ship evaluates it at its local player, the place
-vanilla judges the edge of the world from (the camera would do as well; it is a few metres away, and a
-player is what the server knows the position of). The server evaluates it per floater at the
-floater's position, and per hull at the hull.
-
-**Aboard a ship everyone uses the hull's.** The function agrees to the bit for the same inputs, but
-nobody agrees on where a moving ship is: the owner reads its rigidbody, everyone else a transform that
-trails it by the interpolation lag, and inside a 32m ramp a few metres is enough to differ. So the
-hull's owner, the server or a client that owns the ship it is steering, writes the range it used for
-each anchor onto the ship's ZDO (`HullWindRange.cs`, three slots by anchor number), and everyone
-aboard builds from that. It is written one anchor early: when anchor N comes into use the owner
-evaluates N+2 at the hull and writes it, so it has arrived everywhere long before anyone takes it.
-Nobody ever has to take an anchor's range from a guess and correct it later, which would move the
-strength of an anchor in use and bring back the vegetation sway fault. The price is that wave
-strength follows where the hull was one anchor (10 seconds) earlier and then cross-fades over the
-next, 10 to 30 seconds after a crossing in all, which is the same order as vanilla's camera-triggered
-blend followed by a latched wind target. A new owner carries on from the previous owner's slots.
-
-What changes for a player compared with vanilla: wave height and wind strength near a biome border
-ramp over 32m rather than switching when the camera crosses, a weather change reaches the wind at the
-period boundary rather than when each client noticed, and aboard a ship the waves follow the hull's
-weather rather than the camera's. Vegetation, cloth and particle wind follow the same range, since
-they read the same wind. Nothing else looks different.
-
-**Diagnostics**, on by default. The `WaveSync field` line ends with
-`anchorRange[N]=min-max(Source)` for both anchors in use, where `Source` is `ShipPublished` (the
-owner's number), `ShipOwn` (this machine owns the ship and evaluated it), `ShipLocal` (aboard, nothing
-published, evaluated at this client's view of the hull), `Viewpoint` or `Vanilla`, and, when this
-machine evaluated the second anchor itself, `rangeInputs[N]:` with the position, time, the discrete
-weather there and why, the period, the time weight `w`, the cell and fractions, and the four grid
-weathers (and the previous period's while `w < 1`). The `WaveSync hull` line carries
-`range[N]`, `range[N+1]` and `range[N+2]` as published on the ship, on every machine; on the server it
-also carries `rangeInputs[N+2]:` for the one it just wrote. A client that had to evaluate a range the
-owner had not published logs `No wind range published for anchor N on ship ...` once; a server that
-found its own slot empty logs `Hull wind range for ship ... was not published ahead`.
-
-### The waterline effects were nailed to the hull
-
-`ShipEffects.m_shadow` points at a child called `WaterSurface`, which on a karve sits at a fixed
-local `(0, 0.55, 0)` with identity rotation and carries both things a crew reads as the boat
-touching the water: a mesh called `shadow`, the dark patch under the hull, and a particle system
-called `vfx_water_surface`, the foam ring at the waterline. Nothing in the game ever moves or
-rotates that transform — `ShipEffects` only calls `SetActive` on it.
-
-Rigidly parented, it inherits the hull's heave *and* its pitch and roll, so it tilts with the boat
-rather than lying flat on the sea, and holds one fixed height while the hull's real waterline moves.
-Measured in mild swell on the live server, the hull rode between 0.72m and 0.94m into the water. The
-patch therefore lifts clear at one end and sinks under at the other.
-
-This is vanilla, and identical on every machine, so it is not a sync fault. It only became
-noticeable once the hull itself was being placed correctly. `Waves.LevelShipWaterline` puts it where
-its name says it is: on the water surface, level, keeping the hull's heading, with its height from
-the same `Floating.GetWaterLevel` that buoyancy uses so the two cannot disagree.
-
-The foam needed a different fix, because moving its emitter does nothing. Read out of the longship
-prefab, `vfx_water_surface` emits 40 particles a second over a flat 5m x 20m ellipse, each living 2
-seconds, and it simulates in **world space** (`simulationSpace: 1`) with a start speed of zero, no
-gravity, and the velocity, force, noise and inherit-velocity modules all disabled. Every particle is
-therefore frozen in world space for its whole life at whatever height the emitter had when it was
-born, and the emitter's height is the hull's. So the ring traces the hull's heave, which buoyancy
-damps and delays, rather than the sea's. In any real swell that reads as foam following a wave that
-is not there, which is exactly what it is.
-
-An earlier version moved the shared `WaterSurface` parent and made this worse rather than better: it
-drove the emitter up and down the swell while the particles it had already laid down stayed put, so
-the foam scattered from below the hull to above head height. The particles were never attached to
-the emitter, so the emitter is not where the fix goes.
-
-`Waves.LevelShipWaterline` now rewrites each live particle's height from the same
-`Floating.GetWaterLevel` the hull and the shadow mesh use, every `CustomLateUpdate`. Roughly eighty
-particles are alive at a time, so that costs about as much as one more buoyancy sample per boat, and
-every other property of the effect is left as vanilla authored it. The emitter is levelled too,
-which only matters because the emission shape is a flat ellipse: tilted with the hull it
-foreshortens where along the boat particles are born.
-
-Wave height is a function of x and z alone — `CreateWave` reads only `worldPos.x` and `worldPos.z`,
-and `Depth` reads the point's position across the volume — so the sample uses the emitter's own
-height to find the `WaterVolume` rather than the particle's. A particle left above the volume's
-collider by the previous frame would otherwise match no collider and never be brought back down.
-
-Only world-space systems are touched. A local-space one already rides its emitter, so levelling the
-emitter is the whole fix there and rewriting positions on top of it would apply the correction
-twice.
-
-### Perfectly on the water looks fake
-
-Putting every particle exactly on the surface is correct and looks wrong. The ring becomes one rigid
-sheet, conforming perfectly and moving in perfect step, which reads as a decal laid on the water
-rather than as foam floating in it.
-
-`Waves.ShipFoamSpread` (default `0.75`, metres) gives each particle a fixed direction and distance
-to read the sea from, instead of reading it at its own position. The short wave components are only
-a few metres long — the shortest five have `waveLength` 1.0 to 1.5, which is about 4m — so
-neighbours a metre apart genuinely sit at different heights and rise and fall slightly out of step.
-Because `CalcWave` multiplies the whole sum by the wind intensity, this scales itself: near flat in
-a calm, churned in a storm.
-
-`Waves.ShipFoamLift` (default `0.07`, metres) is the part that does not depend on the weather, a
-fixed small height above the surface, different for each particle. `ShipFoamSpread` goes to nothing
-as the sea flattens, which is right for the swell but would leave a dead calm looking like a painted
-ring again.
-
-The ring's terms are **upward only**, so it never dips under the surface it is supposed to be lying
-on. The wake's are not — see below.
-
-Both are derived from `ParticleSystem.Particle.randomSeed`, which is assigned at birth and never
-changes, so the scatter is stable rather than boiling frame to frame. It is the only per-particle
-identity available, because the array `GetParticles` returns is not in a stable order and an index
-cannot be used. Hashing it locally also keeps this off `UnityEngine.Random`, which `EnvMan`'s wind
-octaves seed and read on the same frame.
-
-Set either to `0` to turn that term off; `ShipFoamSpread = 0` also saves the second water sample per
-particle.
-
-### The speed wake was the other half of it
-
-With the ring sitting correctly, the wake stood out as a second, solid layer that disagreed with it.
-`SpeedWake` is a sibling of `WaterSurface`, not a child, so the first fix never reached it.
-
-It holds two species, and only one of them belongs on the water. From the longship prefab:
-
-| system | shape | start speed | gravity | life | size | verdict |
-| --- | --- | --- | --- | --- | --- | --- |
-| `aft_particles` | disc, r1.51, flattened | 0 | 0 | 2s | 7 | sheet |
-| `front_particles` | sphere, r0.64 | 0 | 0 | 1s | 5 | sheet |
-| `Trail` | circle, r0.10 | 0 | 0 | **10s** | **8.05** | sheet |
-| `GameObject`, `GameObject (1)` | cone, r1.20 | 1-2 m/s | 0.03 | 2s | 1 | spray |
-| `rudder` | cone, r0.50 | 1-2 m/s | 0.03 | 2s | 0.5 | spray |
-
-`Trail` is why it read as solid. At rate 5/s with a ten second life, fifty size-8 patches overlap at
-once, each pinned at the height the hull had up to ten seconds earlier. Stacked at their own fixed
-height beside a ring that was now correct, they formed a slab.
-
-The three sheets get the same treatment as the ring, scatter included, which is what breaks the slab
-up into churn. The three spray systems are left exactly as vanilla wrote them: they emit from cones
-at 1 to 2 m/s under gravity with a velocity clamp, they are meant to arc through the air, and
-flattening them onto the water would be wrong.
-
-The test is the behaviour rather than the name — **a system that nothing moves after birth is a
-sheet; a system with speed or gravity is spray**. Concretely: world simulation space, a start speed
-and gravity multiplier of zero, and no velocity, force, inherit-velocity, external-forces or noise
-module enabled. That survives Iron Gate retuning the prefabs, which a list of names would not.
-
-### The wake reads as a speedboat's, and why the obvious cause was the wrong one
-
-Placing the wake correctly did not make it look right, because its density is structural rather than
-positional. `Trail`'s alpha curve is:
-
-| life fraction | alpha |
-| --- | --- |
-| 0.00 | 0.0 |
-| 0.03 | **1.0** |
-| 0.65 | **1.0** |
-| 1.00 | 0.0 |
-
-Full opacity from three percent of a particle's life to sixty-five percent. Combined with a ten
-second life, a rate of 5/s and a size of 8, that is fifty overlapping patches of which most are at
-full alpha — roughly fifty metres of solid white astern before the fade even begins.
-
-`Waves.ShipWakeTrailSeconds` caps how long a wake sheet may live, and it **defaults to `0`, off**,
-because that reasoning was wrong. Capping the life to 3.5s shortened the wake and did nothing at all
-for how solid it was. The density was never the cause; see the next section for what was.
-
-The setting is kept, because it does what it says and a shorter wake is a reasonable thing to want.
-The alpha curve is normalised over the lifetime, so capping the lifetime compresses the whole fade
-rather than truncating it, and the overlap count falls in proportion. Only systems authored longer
-than the cap are touched, which leaves the one and two second sheets at the waterline and the bow
-exactly as they are.
-
-### The wake belongs under the water, not on it
-
-Shortening the trail made it shorter and no less solid, and the reason was a mistake of mine rather
-than anything in vanilla. Vanilla emitted the wake at a fixed height on the hull and let the hull's
-own heave scatter it through the surface, so some of it was always part submerged and the mass broke
-up. Putting every particle exactly on the water — and biasing it upward so none could ever go under
-— threw that variation away and left one opaque sheet.
-
-`Waves.ShipWakeSink` (default `0.35`, metres) gives each wake particle a depth of its own, fixed for
-its life, from the surface down to that depth. It also fades the particle toward a quarter of its
-opacity at the bottom of that range, so deep foam reads as foam seen through water. The fade is done
-by writing the particle's `startColor` rather than by relying on the water to dim it, because
-whether a submerged particle is actually dimmed depends on how the water surface and the foam
-renderer sort against each other, and that is not something to build a look on.
-
-For the same reason the wake takes whatever height `ShipFoamSpread` finds nearby, where the ring only
-ever takes one above its own: the ring may not sink and the wake may.
-
-**The ring at the waterline is deliberately not part of this.** It is sitting on the surface because
-that is where it belongs, and it looks right there.
-
-### Verifying it yourself
-
-`Debug.WaveSyncIntervalSeconds` logs the three inputs on a server and a client alike, keyed by the
-whole second of world time so the two logs can be matched line for line. It is silent unless a boat
-is instantiated, which is what lets it default to on. The `probe=` field is wave height at a fixed
-point, a fixed depth and a fixed second, computed through `CalcWave` directly, so everything
-position and time dependent is identical by construction and the only input left is the wind.
-
-Result on the live server, before and after:
-
-| | before | after |
-| --- | --- | --- |
-| probe difference, same second | `-0.1972` vs `-0.0549` | **`0.0000`** |
-| wind intensity difference | `0.240` vs `0.067` | none |
-| `shaderLead` | `0.184` on both | **`0.000`** on both |
-
-To confirm the measurement can still see a real difference, pin `Debug.ForceEnvironment` to
-`ThunderStorm` on the server only. The server then reports a wind range of `0.80-1.00` and a probe
-swinging +/-2.60m against the client's `0.10-0.60` and +/-0.49m, which is the original fault
-reproduced on purpose. Set it identically everywhere to test a storm honestly.
-
-## Boats destroyed by nothing
-
-A boat left in open water, or sailed into it, could be found on the sea floor having beaten itself
-apart against it. It had resisted five rounds of investigation: five candidate mechanisms were
-proposed and eliminated on a live server, three unrelated faults were found and fixed along the way,
-and none of them reproduced the destruction.
-
-The cause is one missing guard in `Floating`:
-
-```csharp
-private static int s_waterVolumeMask = 0;       // starts at zero
-
-private void Awake() {                           // needs an INSTANCE of a Floating component
-    s_waterVolumeMask = LayerMask.GetMask("WaterVolume");
-}
-
-// GetLiquidLevel, line 236
-if (s_waterVolumeMask == 0) s_waterVolumeMask = LayerMask.GetMask("WaterVolume");   // guarded
-
-// GetWaterLevel, line 279 -- the one Ship.CustomFixedUpdate uses
-Physics.OverlapSphereNonAlloc(p, 0f, s_tempColliderArray, s_waterVolumeMask);       // NOT guarded
-```
-
-An overlap query with a layer mask of `0` matches no layers, so it finds no colliders and
-`GetWaterLevel` returns its "no water here" value of `-10000`. `Ship.CustomFixedUpdate` computes
-
-```
-num2 = centreOfMass.y - averageWaterLevel - m_waterLevelOffset
-```
-
-which comes out at about `+10000`, far above `m_disableLevel`, so every line of buoyancy, damping,
-sail and rudder force is skipped while the rigidbody keeps its gravity. The hull falls out of the sea
-and `ImpactEffect` costs it a full strength self hit each time it bounces on the bottom.
-
-This is why it looked intermittent. The mask is process-wide and, once set, stays set. Near a shore
-or a base something with a `Floating` component — a dropped item, a felled log, a corpse — awakes
-within seconds and silently repairs it for the rest of the run. Out in open ocean on a freshly
-started server, nothing does. Vanilla never meets it either way: a vanilla server has no ship
-instantiated to float, and a client has a local player whose swim checks reach the guarded call site
-almost immediately. Only a server that owns hulls and has no local player can get there.
-
-`WaterQueries.EnsureLayerMask` sets the mask when the server session starts and logs what it found,
-so a recurrence names itself. It is idempotent, because `Floating.Awake` assigns the same value.
-
-Worth noting what did **not** find this. `Vehicles.HoldHullsUntilWaterLoads` exists to stop exactly
-this fall, and it waved both hulls straight through, because it asks `ZoneSystem.IsZoneLoaded` rather
-than asking whether the water actually reads. The diagnostic said `zonesUnderHull=all loaded` and
-`0 of 5 zone(s) missing` while the water under every one of those five points read `-10000`.
-
-The measurement that settled it, from the `diag` spawn request:
-
-```
-GetWaterLevel returned -10000.00
-25 WaterVolume instance(s) in the scene
-1 collider(s) on the WaterVolume layer at that point      <- a collider IS there
-GetComponent says live WaterVolume 'WaterVolume'           <- and it is alive
-live WaterVolume 'WaterVolume' covers this point, surface 29.87
-cache has no entry; cache size 0                           <- the decisive line
-```
-
-An empty collider cache after minutes of a ship querying the water five times per physics step can
-only mean the loop body never ran, which only happens when the overlap query matches nothing. That
-ruled out a first hypothesis, a stale entry in `Floating`'s never-invalidated
-`Dictionary<int, WaterVolume>`, and pointed at the mask instead.
-
-
-## Responsiveness
-
-Once the server owns an object, every interaction with it is a round trip, and two rates Valheim
-hardcodes decide how long that trip takes. Neither matters on a vanilla server, because a vanilla
-server never simulates anything.
-
-- **The server runs at 30 FPS.** `targetFrameRate` is hardcoded in `GraphicsSettingsManager` and
-  applied in `PresentManager`. That sets the floor on how fast the server notices anything at all:
-  an interaction waits up to a full 33ms frame before it is even read.
-- **Object updates go out at most 20 times a second**, and fewer once several players are online.
-  See [Object updates](#object-updates). So objects the server spawns, such as the items a picked
-  bush drops, wait up to another 50ms to reach the client.
-
-Together that is roughly 100ms with no network involved, which is enough to feel. Measured on a
-loopback server, picking went from noticeably laggy to fine by raising `ServerFrameRate` to 60
-alone. The cost is CPU: one player at simulation distance 2 took a Valheim server from 36% to 73%
-of a single core. That is nothing on a desktop and may matter on a small VPS, so the knob is there
-to turn back down.
-
-None of this removes the round trip, it only shortens it. A round trip to the owner is inherent to
-the server owning everything, and it is accepted by design: every player gets the same latency,
-instead of one player getting none and everyone else getting that player's connection.
-
-### Object updates
-
-Every creature, item and piece is a ZDO, and whenever anything about one changes, the whole ZDO is
-sent again to every player near it. A moving creature costs 150 to 250 bytes per update, a tree or
-a building piece 60 to 90. Vanilla limits that stream in three places, and all three were written
-for a server that only relays what clients simulate.
-
-- **One player per frame.** Since 0.216.8 `ZDOMan.SendZDOToPeers2` serves one player per server
-  frame in turn, so each player's update rate falls as players join. At 60 FPS that is about 20 a
-  second for one or two players, 15 for three, 10 for five, 6.7 for eight and 5.5 for ten.
-  `FairZdoSending` serves every player at `ZdoSendRate` instead, spread evenly over the frames.
-- **10 KiB in flight.** `ZDOMan.SendZDOs` sends nothing while more than 10 KiB is queued for a
-  player, and that count includes data Steam has sent but the player has not yet acknowledged. So
-  a player can receive at most 10 KiB per round trip. `ZdoSendWindowMaxKiB` replaces it with a
-  window sized for each player: their Steam send rate over 1.25 round trips plus two send
-  intervals, which keeps Steam busy between sends without letting a long queue build.
-- **150 KiB/s per connection.** `ZSteamSocket` sets Steam's minimum and maximum send rate to the
-  same 153600 bytes. Steam does not estimate bandwidth: Valve's own header says the two should be
-  equal "to manually configure a specific send rate", and the library fixes the rate at connect time
-  as the larger of the minimum and about 4.4 KB per round trip. So raising only the maximum, as
-  several networking mods do, changes nothing over the internet. `SteamSendRateKiB` sets both.
-
-The two last settings only help together, since vanilla's window keeps a player below 150 KiB/s
-anyway. Measured on the loopback test server with 30 tame wolves hunting deer around one player:
-
-| | Vanilla | This mod |
-| --- | --- | --- |
-| Sends per second | 19.5, every one full | 19.7 |
-| Delivered | 135 KiB/s, Steam pinned at 141 | 262 KiB/s at a 384 KiB/s rate |
-| Objects waiting for a later send | up to 2,231 | up to 107 |
-
-The cost is upload: at peak the server may send `SteamSendRateKiB` to every player at once, so 384
-KiB/s for eight players is 25 Mbit/s. Lower it if the server's upload is smaller, and watch the
-network report's Steam queue.
-
-`FollowLivePlayerPosition` fixes a quieter lag. The server decides which zones to build, what to
-simulate and what to send around each player's reference position, and a client only reports that
-every two seconds. The server's picture of a sailing player trails by 20 metres, and after a portal
-jump the destination does not start streaming until the next report. The player's own character is
-already on the server and updated many times a second, so the mod reads that instead.
-
-`ClearTeleportGhosts` fixes a vanilla ordering bug. When an object crosses into another zone,
-`ZDO.InternalSetPosition` files it under the new zone and asks every player whether it has left
-their area before it stores the new position, so the check tests the old one. Players standing at
-a portal are never told that the person who used it has gone, and keep a frozen copy of them there.
-The mod repeats the check once the position is stored, and logs each portal jump it cleans up.
+BepInExPack sets `Game.isModded`, and `Achievements.IsCheatedAtAll` counts that as cheating, so a
+modded game earns no achievements and records none of the stats they read. Once the server has
+answered its manifest, a client on a Server Authority server lowers the flag only while
+`IsCheatedAtAll` runs. Every other reason still applies: a character that used devcommands, items
+spawned with them, and world modifiers the game counts as cheats. Single player and hosted games
+are untouched.
+
+Cheating is not opened up. On a dedicated server a client cannot run cheat commands at all
+(`Terminal.IsCheatsEnabled` needs `ZNet.IsServer`); an admin's command runs on the server, which
+logs `Remote admin '<id>' executed command`. Progress from before this was never recorded, so it
+starts from zero. Each player's log says at spawn whether achievements are allowed, and if not, why.
+
+## Waves and weather
+
+Waves are never sent over the network: every machine computes the sea from position, world time and
+its own wind. Three of those inputs disagreed between machines, which made boats look sunk for
+everyone but the hull's owner.
+
+- **Wind was latched local state.** Each machine kept whichever noise target its own transition
+  timer finished on. `DeterministicWind` makes it a cross-fade between two anchors on a grid of world
+  time, with vanilla's noise and shape, each anchor held while in use so vegetation sway stays
+  steady. Moder's power is decided by the server for a hull it simulates and written to the ship
+  (`ModerHeading.cs`).
+- **The rendered sea ran ahead of the physical one** by about twelve frames.
+  `AlignRenderedWaterWithPhysics` ties the shader's water time to the world clock, catching up at four
+  times real time and snapping gaps over ten seconds.
+- **The server picked its weather at the world origin**, where its unused camera sits.
+  `ServerWeatherFollowsPlayers` resolves it at the lowest-id player.
+
+`ServerWeatherPerPosition` goes further: anything the server simulates gets the weather a player
+standing at its position would have (`LocalWeather.cs`), loaded around each call by a `WeatherScope`.
+That covers spawning, rain wear and cover, fires and fireplaces, cinders, windmills, fish, the
+leviathan, wisps, ships and every floater. Without it one player's raid forced its weather on the
+whole world. Raids run by Valheim Creatures are found through reflection (`CreaturesRaids.cs`).
+
+`BlendedWeatherWind` makes wave strength a function of position and world time: the weather is
+blended over a 32 m grid and over the first seconds of each weather period, so a border or a weather
+change ramps the same way on every machine. A ship's owner writes the range for upcoming wind
+anchors onto the ship (`HullWindRange.cs`), and everyone aboard uses it.
+
+`LevelShipWaterline` puts a boat's waterline patch, foam ring and wake sheets on the water instead of
+at the hull's height when they were emitted. `ShipFoamSpread`, `ShipFoamLift` and `ShipWakeSink`
+give each particle a stable offset of its own so the foam does not read as a decal; spray is left
+alone.
+
+`Debug.WaveSyncIntervalSeconds` logs wind, water time and a fixed probe on every machine, keyed by
+the world second, so a server and a client log can be compared line for line.
+
+## Object updates
+
+Two rates Valheim hardcodes decide how long a round trip to the server takes: the dedicated server's
+30 frames per second, and object updates at most 20 times a second. Together that is roughly 100 ms
+before any network. Vanilla also limits the update stream in three ways, all written for a server
+that only relays:
+
+- **One player per frame.** `ZDOMan.SendZDOToPeers2` serves one player per frame in turn, so at 60
+  FPS each player gets about 15 sends a second with up to three players online, 10 with five and
+  5.5 with ten. `FairZdoSending` serves everyone at `ZdoSendRate`.
+- **10 KiB in flight.** `ZDOMan.SendZDOs` sends nothing while more than 10 KiB is unacknowledged.
+  `ZdoSendWindowMaxKiB` sizes the window per player from ping and Steam rate.
+- **150 KiB/s per connection.** `ZSteamSocket` fixes Steam's minimum and maximum send rate at
+  153600 bytes, and Steam does not estimate bandwidth, so raising only the maximum does nothing.
+  `SteamSendRateKiB` sets both. At 384 KiB/s, eight players at once is about 25 Mbit/s of upload.
+
+`FollowLivePlayerPosition` uses each player's character on the server rather than the position its
+client reports every two seconds, which trails a sailing player by 20 metres. `ClearTeleportGhosts`
+repeats the zone departure check that `ZDO.InternalSetPosition` runs against the old position, so
+players at a portal are told the traveller has left.
 
 ### Reading the network report
-
-`Debug.PerformanceReportSeconds` also prints one line per player, for example:
 
 ```
 Test Maiden: 19.7 sends/s (19.3 with data), 1205 objects/s, 262.5 KiB/s, window up to 38 KiB;
@@ -1105,797 +272,133 @@ Steam out 245.3 KiB/s; send work 0.53 ms per send (worst 3.5 ms).
 Most sent: 43% Deer, 34% Wolf, 6% Neck, ...
 ```
 
-- **sends/s** should sit near `ZdoSendRate`. Much lower means the server's frame rate is the limit.
-- **full** sends ran out of window with changes left over; those wait for the next send, 50ms
-  later, which is harmless on its own. **fell behind** means more was left over than the send
-  carried, so changes pile up and creatures start to stutter for that player. **held back** means
-  the window was still full from earlier sends.
-- **Steam queue** is how long new data waits behind data already queued. If it stays near a
-  hundred milliseconds or more while the player falls behind, the Steam rate is the limit, which
-  `SteamSendRateKiB` raises, provided the upload allows it.
-- **send work** is the server CPU spent choosing and packing updates, most of it scanning every
-  object around the player. It grows with the size of bases, and with the send rate.
-- **Most sent** is the share of bytes by prefab, and tells a tame pen, a raid or a base full of
-  changing objects apart.
-
-`Debug.NetworkSaturationWarning` logs the same line as a warning, at most once a minute, when a
-player falls behind or is held back in at least that share of sends over ten seconds.
-
-## What the server cannot do
-
-The mod's founding assumption is that the server can simulate anything a client can. That is false,
-and every serious bug found so far has been an instance of it. The server is an owner that does not
-have the local state vanilla quietly assumes an owner has. Seven kinds, nearly all found by playing:
-
-1. **No local player.** `Player.m_localPlayer` is null, so owner-run code and `Everybody` RPCs that
-   touch it throw. See [The local player trap](#the-local-player-trap).
-2. **No local component state.** A networked flag says "this is in use" while the mechanism behind
-   it is a local object that only the machine really doing the work has.
-   - `Vagon.IsAttached()` reads a networked flag, but the joint `m_attachJoin` is local. An owner
-     without the joint concludes the cart is attached to nothing and detaches it, ripping the cart
-     off whoever is pulling it, within a frame.
-   - `ShipControlls.HaveValidUser()` is a networked user id **and** `Ship.IsPlayerInBoat()`, which
-     walks `m_players`, a list built by `OnTriggerEnter`. A server whose triggers disagree decides
-     nobody is at the helm and takes the boat back mid-voyage. The fix is to ask the replicated
-     character positions instead, which is what `Sadle` already does and why mounts were never
-     affected.
-   - A hooked fish. `Fish.OnHooked` claims the fish for the fisher and keeps the hook in a local
-     field, `m_fishingFloat`, which drives the fish's escapes and its fight; the `s_hooked` int it
-     also writes is only read for a splash effect. Fish are persistent, so the policy took a
-     freshly hooked fish back after the 3 s grace for a peer's claim, 4 to 6 s into the fight. The
-     server then ran it as an unhooked fish: no escapes, wandering its own waypoints, and fleeing
-     only a player whose noise reached it from beyond half its avoid range, which a fisher
-     standing still does not make, while the float still dragged it. The fisher's copy stopped
-     updating, so `IsEscaping` froze, either halving the reel speed and charging escape stamina for
-     the rest of the fight or never escaping at all.
-
-     `HookedFish.cs` keeps a hooked fish with its fisher through the same lease mounts and carts
-     take, renewed on every ownership pass. A fish counts as hooked while a fishing float the server
-     holds names it as its catch in `s_sessionCatchID`, a key the float's owner writes and clears.
-     That, and not `s_hooked`, is the test, because vanilla leaves `s_hooked` at 1 when a fish is
-     lost for lack of stamina. Only objects whose prefab has a `Fish` component are leased, so a
-     float naming anything else cannot touch another lease. A hooked fish can still nibble and be
-     hooked by a second player's float, since it keeps picking waypoints, so when two floats name
-     one fish the lease stays with its current owner if that is one of the fishers, or otherwise
-     with the lower peer id. The lease ends at the next pass after a catch, a loss, a broken line,
-     the float going away or the fisher disconnecting, so within about 2 s, and lapses on its own
-     after 6 s without renewal. Taking and releasing a fish are logged, with the fisher's name
-     captured while they are still connected, and only when the fisher holding it changes.
-   - A loaded catapult. `Catapult.OnLoadPointUse` takes the ammo out of the loader's inventory and
-     sets `m_loadStack`, the number of shots, only on the loader's machine, and the release about
-     1.4 s later fires only on the owner, `m_loadStack` times. A loader who does not own the
-     catapult asks for it with `RPC_RequestOwn`, which the catapult's `Vagon` grants unless someone
-     is pulling it; a loader who already owns it asks nothing. So the shot works only if the loader
-     owns the catapult at release. The policy broke that for a loader who already owned it from an
-     earlier claim, lowering the legs or letting go of the cart: the grace for a peer's claim runs
-     from when the policy first sees it, and a load does not restart it, so a load up to 1.4 s
-     before the reclaim lost its ammo and fired nothing, since the server's copy has no
-     `m_loadStack`. `CatapultLoad.cs` takes over the catapult's `RPC_SetLoadedVisual` handler
-     through `RpcTakeover`. The loader broadcasts it at the moment of loading, so its sender is the
-     loader. The server then leases the catapult to the loader for 6 s, well past the release, and
-     hands it over at once if anyone else holds it, the server, nobody, or another player the
-     loader has not yet heard from, so neither the next policy pass nor a reclaim in flight can
-     miss the shot. The first loader keeps it: a second player's load while that lease stands is
-     left to vanilla, as a second ownership request would be. A catapult someone is pulling is left
-     alone, as vanilla denies the request too. On every ownership pass, before the candidates, the
-     lease is checked and ended when it has lapsed, when the loader has disconnected, or when
-     another connected player has taken the catapult through vanilla, for example by grabbing the
-     pull bar, so the policy never pulls it back from them before their attach flag arrives. A
-     takeover counts only if the ZDO's owner revision has risen since the load, because a late
-     update from the catapult's previous owner can briefly write their name back without one. None
-     of this runs when the ownership mode is `Vanilla`. Loads and the end of each lease are logged
-     with the reason. If the loader's connection takes longer than
-     the 1.4 s to receive ownership, the shot is still lost, as it would be in vanilla, where the
-     request goes to whichever client owns the catapult; firing from the server instead would
-     risk a second shot.
-   - A push on a creature. `Character.ApplyPushback(dir, force)` only stores a push in the local
-     field `m_pushForce`, which the owner's movement code then feeds into the body; on any other
-     machine it does nothing. A hit's own push travels with the damage to the owner, but the
-     separate knockback in `Aoe.OnHit`, `m_knockBackForce`, is applied directly on whichever
-     machine runs the AoE. Three AoEs have it, all run on a client: `staff_thunderblood_aoe`
-     (25) and the upgrade station's `fx_UpgradeStation_Success` (8) and `_Fail` (13). In vanilla
-     the client often owns the creatures around it and the push works; here every creature is the
-     server's, so it was always lost. For the staff that hardly shows, since its hit already
-     carries an `m_attackForce` push of 100 and `ApplyPushback` keeps only the larger one, but the
-     upgrade bursts carry a push of 0 and 2, so they never moved the tames around the station.
-     `RemotePush.cs` handles it from a prefix on `ApplyPushback`, which is not an RPC method. On a
-     client, a push on a character the server owns is sent to the server with the character's
-     ZDOID, direction and force, and the server, for a connected sender and a character it owns,
-     calls the same `ApplyPushback` itself; the pointless local call is skipped. Folding the
-     knockback into the hit's own push was rejected: that runs through blocking and the other early
-     returns in `RPC_Damage`, which vanilla's knockback does not, and would need the hit changed
-     inside `OnHit`. Pushes on players another client owns are left as vanilla, which loses those
-     too; forwarding them would let one client move another player. A client can push any
-     server-owned creature this way, which only matters against a deliberate cheater; the server
-     rejects a force or direction that is not a finite number and caps the force at 50, twice the
-     staff's knockback, so a push cannot break a creature's movement. The first push sent and the
-     first applied per session are logged.
-3. **Nothing. The boat failure was this mod's own bug**, and it is worth recording because the
-   first two explanations written here were both wrong. A server-owned hull sank, tumbled and
-   exploded, which was blamed first on the server having no water volumes and then on an
-   unidentified fault. Instrumenting it settled both: water lookups failed 3 times in 376 samples,
-   all in the first frames after spawn, and ownership of the crewed hull was flipping between the
-   server and the driver every two seconds. Two machines taking turns simulating one rigidbody is
-   what destroyed the boats.
-
-   The cause was an id-space confusion in `FindDriver`. `ShipControlls.GetUser()` returns a
-   persistent **playerID**, while `ZDOID.UserID` is a **peer session id**; comparing them never
-   matches, so no driver was ever found, no lease was ever granted, and the sector policy reclaimed
-   the hull on every tick. `Player.GetPlayer(playerID)` does the lookup in the right space against
-   instantiated players whose ids come from their ZDOs, so it works on a server. Mounts had the same
-   latent bug and are fixed the same way.
-
-   The 3 failed water lookups in that instrumentation run were written off as noise at the time.
-   They were not. See the next item.
-
-4. <a id="a-server-owned-hull-needs-its-neighbourhood"></a>**No loaded neighbourhood.** A client
-   never simulates anything until its whole active area exists, because
-   `ZNetScene.CreateObjectsSorted` returns early unless `IsActiveAreaLoaded`. The server cannot use
-   that gate, since one player still loading would stall object creation for everybody, so it
-   creates each object as soon as that object's own zone is ready. Anything that reads the world
-   beyond its own zone can therefore run against a half built neighbourhood.
-
-   `Ship` is the case that kills. It samples the water at five points spread across its float
-   collider, which on a longship is 8 by 17 metres, and the `WaterVolume` in the zone prefab is a 64
-   by 64 box that tiles one zone exactly with no overlap, so bow and stern routinely sit in the
-   neighbouring zone. `Floating.GetWaterLevel` answers **-10000** for a point with no water volume
-   on it, so one missing neighbour pulls the five point average to about -2000 metres, the hull
-   concludes it is two kilometres above the sea, and `Ship.CustomFixedUpdate` skips every line of
-   buoyancy, damping and sail force in one `if`. Gravity is untouched, so the hull falls out of the
-   ocean.
-
-   **The visible symptom**, reported by a tester before any of this was understood: a moored boat
-   **jumps about when you log in near it, or walk in far enough to activate its physics**. That is
-   this fault, seen from the outside. The hull activates, reads -10000 for part of itself, falls, and
-   is then thrown back up when the missing zone arrives. `Patches/ShipPhysicsPatches.cs` holds a
-   server-owned hull still, in place, whenever any of the five zones it is about to measure does not
-   exist, and releases it unharmed once they all do. It asks about zones rather than about water on
-   purpose: a beached hull also reads -10000, and there vanilla's answer, falling, is the correct one.
-
-   **How bad it gets is a question of duration, and the honest answer is that it varies.** A hull
-   that loses buoyancy for the length of a zone-load race, around 0.6s, falls about 1.7m and bobs
-   back: measured with the gate disabled, and it cost nothing. But a hull was also observed sitting
-   on the sea floor, `y=24.47` against a seabed of `23.9`, with `bow zone MISSING`, having lost 30 of
-   its 500 health. So it does reach the bottom and it does cost health. The long windows appear to
-   belong to a client-owned hull rather than a server-owned one, and were not pinned down.
-
-   Three corrections to earlier drafts of this section, all found by testing it rather than reading:
-
-   - A draft claimed a *permanent* hole where a hull at the edge of the active area has a sample point
-     in a zone that is never built. The geometry does not allow it for a **server-owned** hull:
-     `ZNetScene.InActiveArea` caps it at 112m from a player's zone centre, and 8.5m of hull reach
-     still leaves every containing zone's centre inside the 160m near radius, because zone centres
-     quantise to 64m. The hole does exist beyond ~160m, where the server has the hull but not its
-     neighbour zone, and is harmless there because nothing owns it. A client instantiates only after
-     `IsActiveAreaLoaded`, so the two bands never overlap on a client either.
-   - Holding the hull by zeroing its velocity lets the rigidbody fall **asleep**, and a sleeping body
-     gets no gravity. Vanilla only calls `WakeUp` inside the buoyancy block, which is skipped
-     whenever the hull rides above `m_disableLevel` — a wave trough is enough. A hull released while
-     asleep and above the surface hangs in the air until some later wave runs the block for it.
-     Observed doing exactly that by a tester looking at it, while the log showed `vel=0.0` and every
-     zone loaded, which is indistinguishable from resting on calm water. `Release` now calls `WakeUp`.
-   - The buoyancy fault is **not** what destroyed the boat that started this investigation. Five
-     mechanisms were proposed and eliminated: the zone-load race (too short), a permanent geometric
-     hole (does not exist), sinking out of the `WaterVolume` box below y=-20 (the seabed there is at
-     24.1, only 5.1m of fall), raid creatures (the boat was already destroyed before any spawned),
-     and a storm driving it aground (the impacts turned out to be the tester moving it off land).
-     The cause is still unidentified. See [Known Bugs](#known-bugs).
-
-5. **Zones that vanish under a player's feet.** Vanilla leaks here and the leak is the one path
-   that reaches a moored boat without the mod's help. `CreateLocalZones` resets the time to live of
-   each near zone as it walks its list, but returns the moment it spawns one, so everything later in
-   that list keeps ageing. A moving player spawns a zone almost every tick, starving the tail
-   indefinitely, and `UpdateTTL` then destroys any zone past `m_zoneTTL` whose sector holds no
-   instance. `ZNetScene.HaveInstanceInSector` only protects a zone that *contains* something, so an
-   open stretch of water beside a moored boat is precisely what gets thrown away — taking its
-   `WaterVolume` with it.
-
-   The consequence is the buoyancy fault above, arrived at from the other direction, and it explains
-   why it is invisible in calm water: the `-10000` skips the block that holds the only `WakeUp` call
-   in `Ship`, so a sleeping hull just sits there. In a storm the waves keep the body awake every
-   frame, and an awake body with no buoyancy falls. `KeepNearZonesAlive` in
-   `Patches/ZoneSystemPatches.cs` resets every near zone's ttl before anything is built. It touches
-   `m_zones` directly rather than calling `PokeLocalZone`, because that method spawns a zone it does
-   not find, and calling it across the whole radius would build a neighbourhood in one frame instead
-   of one zone per tick. The mod also made this worse than vanilla: `ZoneEvictionsPerTick` defaults
-   to one eviction per player per tick against vanilla's one.
-
-6. **No meaningful reference position.** `ZNet.GetReferencePosition()` is the origin on a server,
-   and code keyed off it silently does the wrong thing rather than failing. `ZoneSystem` and
-   `ZNetScene` are the obvious two and are patched, but `SlowUpdater` is a third: it hands every
-   `SlowUpdate` instance the zone of that reference position, and `StaticPhysics` gates its falling
-   and settling on whether it is inside the active area around that zone. Everything in the world is
-   far from the origin, so every static physics object concluded it was out of range and never ran,
-   which would leave felled logs never settling. Found by reading rather than by it failing, so
-   unlike the rest of this list it was fixed before anyone saw the symptom. `Plant` is the only
-   other `SlowUpdate` and ignores the argument, so crops were never affected.
-
-7. **One weather.** Vanilla resolves weather once per machine, at its camera, and a client only
-   simulates what is around that camera. A server simulating every player's surroundings at once
-   needs the weather at each position instead, or one player's raid puts out every fire in the
-   world. See [One weather for the whole world](#one-weather-for-the-whole-world).
-
-**When hunting the next one, look for vanilla code that reads local component state**, or that keys
-off `GetReferencePosition()`, rather than
-for ownership bugs. The ownership policy itself has not been the problem.
-
-## Patching RPC methods can kill the server
-
-Valheim dispatches RPCs through `Delegate.DynamicInvoke`, so an RPC method is reached by reflection
-rather than by a direct call. Harmony replaces a patched method with a dynamic method, and Mono can
-fail to invoke that through reflection, raising
-`BadImageFormatException: Method has zero rva`. Worse, Unity then formats the exception, and Mono
-aborts inside `StackTrace.ToString` with `Assertion at metadata.c:1381` while reading parameter
-metadata off the dynamic method. That is a hard process abort, not an exception: the server dies.
-
-This happened on a live server on `Container.RPC_RequestOpen`, after the same patch had worked for
-an hour, so treat it as a latent hazard rather than a deterministic bug. The patch surface on RPC
-methods has been cut to the four that prevent guaranteed crashes: `Pickable.RPC_Pick`,
-`Trap.RPC_OnStateChanged`, `Leviathan.RPC_Left` and `MusicVolume.RPC_PlayMusic`. Those are still
-exposed to the same hazard and there is no way to fix what they fix without patching them, since
-the null dereference happens at the call site.
-
-Everything optional was removed. The container and vehicle handover patches only covered the
-roughly 100ms gap between the server handing an object to a client and that client writing back the
-flag that says so. `OwnershipPolicy` now covers that with a grace period on any object a connected
-peer has just claimed, which needs no RPC patching at all and covers every such handover uniformly.
-
-**Do not patch an RPC method unless nothing else will do.**
-
-It is not confined to RPC methods, and it is not confined to the server. Two further sightings:
-
-- **`ZNet.Disconnect`, server side.** `IntegrityServer` had a prefix on it to forget a peer's
-  session. The first time a player ever quit to the desktop while the server kept running, Mono
-  raised the same exception building the replacement, every frame, forever: `ZNet.UpdatePeers` calls
-  `Disconnect` for the closed socket, the call throws, so the peer is never removed from `m_peers`
-  and the next frame tries again. One quit produced 5012 exceptions and the slot never freed, so the
-  player could not reconnect. `Disconnect` reaches `peer.Dispose()` and so `ISocket.Dispose` and the
-  Steam native socket, and a P/Invoke has no IL body to work from. The patch is gone;
-  `IntegrityServer.DropClosedSessions` reconciles sessions against `ZNet`'s own peer list from the
-  `ZNet.Update` postfix instead, which needs no patch on the hazardous method and cannot be left
-  half done by an exception.
-- **Client side, during connect.** Once seen on a client while joining, starting in
-  `ZRpc::HandlePackage` dispatching an RPC by reflection, with the inner frame inside Mono's own GC
-  write barrier icall. From that point *every* Harmony dynamic method in the process failed:
-  `WaterVolume::StaticUpdate` 48137 times, `Game::FindSpawnPoint` 8695, `SpawnSystem::UpdateSpawning`
-  4009, and so on. The login hung because the character sync RPC could not be delivered and
-  `FindSpawnPoint` held the spawn. A relaunch cleared it, and the previous run of the same build had
-  only the usual harmless shutdown occurrences.
-
-So treat it as a property of the runtime rather than of any one patch: once it starts, it poisons
-every patched method at once, and the method with the highest count is merely the one called most
-often. The defence is to keep the patch surface small, which is a real cost to weigh against what a
-patch buys.
-
-## The local player trap
-
-The single most common way this mod breaks the game is code that dereferences
-`Player.m_localPlayer`, which is always null on a headless server. There are two distinct flavours
-and the second one is easy to miss:
-
-1. **Owner-run code.** Anything gated on `IsOwner()` now runs on the server. Vanilla's authors could
-   assume the owner was a client with a local player. `SpawnSystem.UpdateSpawning` is the classic.
-2. **`Everybody` RPCs.** These are the subtle ones. On a vanilla server they are harmless, because
-   the server holds ZDOs but never instantiates the GameObjects, so `HandleRoutedRPC` finds no
-   `ZNetView` and the method never runs. This mod gives the server those instances, so every
-   `Everybody` RPC that touches the local player starts throwing.
-
-Found and fixed so far, in `Patches/LocalPlayerRpcPatches.cs`: `Pickable.RPC_Pick` (broke picking
-entirely: it threw before the drops spawned, so no items and the bush never went picked),
-`Leviathan.RPC_Left`, `MusicVolume.RPC_PlayMusic` and `Trap.RPC_OnStateChanged`. In
-`Patches/HeadlessPatches.cs`: `Ship.UpdateSailSize`, which reads
-`Player.m_localPlayer.GetPlayerID()` with no guard to spawn the sail-change effect and therefore
-throws once a frame for the whole of every raise and lower of a sail.
-
-There is a third flavour, and it is quieter than either of these because it throws nothing at all:
-
-3. **Static state that a local player would have initialised.** `Floating.s_waterVolumeMask` starts
-   at zero and is filled either by an instance of a `Floating` component awaking or by a call site
-   that happens to guard itself. On a client a player's swim checks reach that guard within seconds
-   of spawning; on this server nothing does, and `Floating.GetWaterLevel` then silently reports no
-   water anywhere and sinks every boat. See [Boats destroyed by nothing](#boats-destroyed-by-nothing).
-   When hunting these, a missing null check announces itself in the log and a missing initialisation
-   does not, so look for statics whose only writers are `Awake` methods or guarded call sites.
-
-A fourth is just as silent:
-
-4. **Rewards queued for the local player.** When a creature with a defeat key dies,
-   `Character.OnDeath` on its owner sets the world key and also queues the key in
-   `Player.m_addUniqueKeyQueue`, which the next `Player` to wake on that machine adds to its own
-   keys. On a client that is usually its own character at its next spawn, though it can be another
-   player's character coming into view first, which keeps nothing. On this server no character is
-   ever the local one, so no player gained `KilledTroll`, `KilledBat`, `killed_surtling` or a boss
-   key of their own. The world keys were unaffected. Player keys are what raids go by when the world has
-   player based raids on, and with them missing the bat raid, which asks for `KilledBat` and
-   `defeated_bonemass` and nothing else, could never come. The same method counts the last hit
-   toward the owner's own statistics only when the attacker is `Player.m_localPlayer`, so no
-   player's last hits were counted either. `KillCredit.cs` sends both from a prefix on
-   `Character.OnDeath`. The key goes to every connected player the creature's `Attackers` record
-   says hit it, which is the same list vanilla credits with the kill in its statistics, and the
-   client adds it to its own character, or queues it until the character spawns. It is sent
-   whether or not player based raids is on, as vanilla does, so turning the setting on later
-   finds the keys already earned. The last hit goes to the player whose character dealt it. The
-   boss dream that `OnDeath` also sets needs nothing: `CinematicsManager.SetDreamCinematic`
-   broadcasts to every peer, so each client with a local player keeps it.
-
-A fifth assumes the owner is the victim's machine:
-
-5. **Attacks only the spawner can deal.** A trigger AoE, which is what the breath attacks spawn,
-   damages only characters owned by the machine running that copy of it, and the attack it
-   carries is filled in by `Aoe.Setup`, which runs only on the machine that spawned it. Every other
-   copy keeps the prefab's values. Vanilla gets away with it because a creature's owner is
-   normally the client of the player it is fighting, which both spawns the AoE and owns the player
-   standing in it. Here the creature, and so `Setup`, is on the server, which owns no player, and
-   each client's copy hit its own player with the prefab's values. On `Fenring_attack_flames_aoe`
-   (the Fenring Cultist's flame and frost breath), `BonemawSerpent_breath_aoe` and
-   `fallenvalkyrie_poisonbreath_aoe` those are zero damage, zero push and no status effect, so
-   these breaths did nothing to any player. `shaman_attack_aoe` has the same shape, but the
-   shaman's attack is melee and never spawns it. The Fader's flame breath and the fire its meteors
-   and aspect leave behind (`Fader_Flamebreath_AOE`, `aspect_Fader_Flamebreath_AOE`,
-   `Fader_DroppedFire_AOE`, and `Fader_WallOfFire_AOE` when a meteor drops it) keep their damage on
-   the prefab and did hurt, but with no attacker, and the world's combat modifier, the per-player
-   damage scaling and the world level bonus apply only to a hit whose attacker is known to be a
-   creature. The wall of fire the Fader raises directly comes from a `SpawnAbility`, which never
-   runs `Setup`, so it has no attacker on any machine, in vanilla as here.
-
-   `TriggerAoeSetup.cs` has the server write what `Setup` received (the attacker, the attack's
-   `HitData`, and the weapon's quality and world level) into the AoE's own ZDO from a postfix on
-   `Setup`. That runs in the frame the ZDO is created, before it can be sent, so no client ever
-   sees the AoE without it. Each client replays `Setup` from a postfix on `ZNetScene.CreateObject`,
-   after every `Awake` on the new object has run, so it does not matter that the Fader's prefabs put
-   `Aoe` ahead of `ZNetView`. Hit detection stays on the victim's own machine, against its own
-   position, as vanilla intends. The replayed copy adds only what the spawner's copy would have
-   done to that player: it never raises the attacker's skill, and when it took the attack's damage
-   it leaves props to the server's copy, since otherwise every client near a breath would hit the
-   same piece again where vanilla's other copies hit it with the prefab's zero damage. The server's
-   copy hits server-owned characters and props as before. AoEs spawned by players are untouched:
-   the server never runs their `Setup`, and a client replays only a setup on a ZDO the server owns.
-   The first setup of each prefab is logged on both ends, and so is a replay whose attacker the
-   client does not have.
-
-A sixth credits the owner with work a player did:
-
-6. **Crafts credited to the station's owner.** Taking a finished item out of a cooking station
-   runs `OnInteract` on the player's own client, which raises their cooking skill, rolls the bonus
-   yield and counts the cook or burnt stat there, then sends `RPC_RemoveDoneItem` with the amount
-   to the station's owner, now the server. The owner calls `SpawnItem` once per item and only then
-   empties the slot. On the Frost Foundry, the only station with `m_recordCrafter` set, `SpawnItem`
-   stamps the item with `Player.m_localPlayer` as its crafter, which on the server throws after the
-   item already exists and before the slot is emptied. Every collect produced one more copy of the
-   Deep North weapon, armour or key while the foundry kept its finished item, so they could be
-   duplicated without end, and none had a crafter. The foundry has no skill, so it never rolls a
-   bonus and nothing was lost there. The other stations' `SpawnItem` goes on to count the item in
-   `Game.instance.GetPlayerProfile()`, which on the server is the server's own profile, and the
-   foundry's threw before reaching that line, so its crafts were counted nowhere. No cooked food or
-   foundry craft reached any player's stats, and AllFoodCooked, AllWeaponCraft and AllItemCraft
-   could never unlock.
-
-   `CookingCollect.cs` handles the collect on the server with the collector known exactly. A
-   postfix on `CookingStation.Awake` replaces the station's registered `RPC_RemoveDoneItem` handler
-   with one that does the same work, spawning every item before it empties the slot, and emptying
-   it even if a spawn throws, so a future fault there costs items rather than duplicating them. It
-   copies `RPC_RemoveDoneItem` and `SpawnItem`, so re-read both after a game update; if the handler
-   it expects is not registered, the server logs a warning once and leaves vanilla's code in place.
-   The RPC's sender is the collecting peer, whose character ZDO gives the player id and name for
-   the crafter, and the craft stat goes to that peer through `StatCredit.cs`. No RPC method is
-   patched: the delegate `DynamicInvoke` reaches is an ordinary compiled method, so the hazard in
-   [Patching RPC methods can kill the server](#patching-rpc-methods-can-kill-the-server) does not
-   apply. Finding the collector as the player closest to the position the client sends was rejected,
-   since two players at one station are told apart reliably only by who sent the request. What the
-   collecting client does for itself stays with it. `StatCredit` carries a stat or an item craft to
-   one player's own profile, or a skill gain to their own skills, and is meant for the other stats
-   the server now earns on players' behalf. `Smelter`, which also runs the kiln, windmill,
-   spinning wheel and refinery, and `Fermenter` spawn their output on the owner without touching a
-   local player or profile, so they needed nothing. Every foundry collect is logged with its item
-   and collector, and so is any collect whose collector cannot be found.
-
-A seventh trains the server's copy of a player instead of the player:
-
-7. **Skill gains a summon earns for its summoner.** A tamed creature calls `Character.RaiseSkill`
-   when its attack connects, once per melee swing or area attack however many it hits, when its
-   projectile or AoE hits, and when it blocks. A creature whose `Tameable` has `m_levelUpOwnerSkill`
-   passes the gain on to its follow target's `Skills`. Only summons have it: `Skeleton_Friendly`
-   from the Dead Raiser and `Wolf_spiritcaller`, `Boar_spiritcaller`, `Moose_spiritcaller` and
-   `Bjorn_spiritcaller` from the spirit caller staff, each raising Blood Magic at half rate
-   (`m_levelUpFactor` 0.5). Casting raises no skill, so for these two staffs the summons' hits are
-   the only way to train it. Vanilla spawns the summon on the caster's client, which owns it and
-   follows `Player.m_localPlayer`, so the gain lands in the real, saved skill. Here summons are
-   persistent and the server takes them over within seconds, and `Tameable` then finds the follow
-   target by name among the players the server has instantiated, which is the server's shell of the
-   summoner. The shell's skills start at zero and are never saved or sent anywhere, so the real
-   Blood Magic never moved. The shell levels quickly from zero, and `Skills.RaiseSkill` then calls
-   `Player.Message`, which forwards to the real client, so the player saw "Blood Magic: 1, 2, 3"
-   unrelated to their actual level, restarting whenever the shell was recreated. `OnSkillLevelup`
-   ran on the shell too.
-
-   `SummonSkill.cs` handles it from a prefix on `Character.RaiseSkill`. Only `Player` overrides that
-   method and a player is never tamed, so the one prefix covers every creature class. When the
-   follow target is a `Player` the server does not own, it sends the skill and the amount to the
-   peer that owns that character through `StatCredit.cs` and skips vanilla, so the shell never
-   levels, messages or plays an effect. The client calls `Skills.RaiseSkill` on its own player,
-   exactly the call vanilla's owner makes. It does not go through `Player.RaiseSkill`, whose status
-   effect multipliers vanilla never applies to a summon's gain either, and the world's skill gain
-   rate is applied by the client as it would be in vanilla. Every other case, a wild creature, a
-   tame without an owner skill or one following something other than a player, runs vanilla
-   unchanged. The first forward from each summon prefab is logged each session. So is the first gain
-   from each prefab that is dropped, which happens only while the summoner's character is being torn
-   down and has no owner to send to.
-
-An eighth counts a player's work for whoever owns what they worked on:
-
-8. **Stats counted by the owner of the thing being hit.** `TreeBase.RPC_Damage` counts `TreeChops`
-   for every hit that does damage, and `Tree` and `TreeTier0` to `TreeTier5` when the tree falls.
-   `TreeLog.RPC_Damage` counts `LogChops` and `Logs` the same way, `MineRock.RPC_Hit` and
-   `MineRock5.DamageArea` count `MineHits` and, when a piece breaks, `Mines` and `MineTier0` to
-   `MineTier5`, and `Character.RPC_Damage` counts `EnemyHits` for every damage message it receives,
-   before it even checks ownership. All of them run on the owner and count only when the attacker
-   is `Player.m_localPlayer`. `Tameable.Tame` counts `CreatureTamed` in the profile of whichever
-   machine runs it. In vanilla a player usually owns what they are hitting, so these mostly land.
-   Here the server owns every tree, rock and creature, so no player earned any of them, and
-   GrindTrees, which asks for 500 `Tree`, could never unlock. The rest show only on the stats page.
-
-   `EarnedStats.cs` credits them from the server. It takes over five RPC handlers:
-   `TreeBase.RPC_Damage`, `TreeLog.RPC_Damage`, `MineRock`'s `Hit`, `MineRock5.RPC_Damage`, and
-   **the `RPC_Damage` of every non-player `Character` on the server**, which every hit on every
-   creature passes through. Each is replaced from a postfix on the method that registers it
-   (`Awake`, or `Start` for `MineRock`), under the same conditions, with a lambda that calls
-   vanilla's method as an ordinary call and compares the object before and after to see what
-   vanilla would have counted. Health that dropped is a chop or a mining hit, a tree or log that is
-   gone has fallen, and a hit area at zero health has broken. `MineRock5` keeps its health as one
-   encoded string, so there a change in the ZDO's data revision says the hit saved new health, which
-   vanilla does only when it dealt damage. The credit goes, through `StatCredit.cs`, to the
-   attacker's own client when the attacker is a `Player` the server does not own, with vanilla's
-   stat types and tier numbering. `EnemyHits` is credited only for a hit the server handles as the
-   creature's owner: a creature the policy has left ownerless for a moment turns the attacker's
-   damage message into a broadcast, which the attacker's own client already counts, as in vanilla.
-   Vanilla marks `LogChops`, `Logs` and the mining stats cheated when the attacker has a cheated
-   weapon equipped, and never the tree stats. The server's copy of a player has no inventory, so the
-   client checks its own when the credit arrives. The achievement check runs inside
-   `PlayerProfile.IncrementStat` whatever called it, so GrindTrees unlocks from a credit exactly as
-   from a local chop.
-
-   `CreatureTamed` goes, from a prefix on `Tameable.Tame`, to the player vanilla tells the creature
-   is tamed, the closest within 30 m, or failing that the closest player whose active area holds
-   the creature, since taming only needs the creature fed and the feeder may have walked off.
-   Vanilla credits whichever client owns the creature, normally the one tending it, and the server
-   cannot see who fed it, so the player the game congratulates is the fairest choice.
-
-   `RpcTakeover.cs` does the unregister and register for these and for the cooking station. It
-   warns once a session if a handler it expects is missing, or if the handler it replaces is not
-   the component's own, which would mean another mod's replacement is being discarded. Each credit
-   is one small message to the attacker's client: one for a chop, mining hit or creature hit, two
-   for a log that breaks, three for a felled tree or a broken rock piece, and one per area for a
-   hit that `MineRock5` spreads over several, as vanilla counts them. A hit already sends the
-   damage message, a damage text to every peer and a health update. The first credit of each stat
-   per session is logged, and every tame is, saying whether the credit reached a connected client.
-   `EarnedStats` reproduces the counting conditions of `TreeBase.RPC_Damage`, `TreeLog.RPC_Damage`,
-   `MineRock.RPC_Hit`, `MineRock5.DamageArea`, `Character.RPC_Damage` and `Tameable.Tame`, so
-   re-read those after a game update.
-
-A ninth moves the server's copy of a player instead of the player:
-
-9. **Launches that only move the server's copy.** `Aoe.OnHit` calls `Character.ForceJump` on every
-   character it hits when `m_launchCharacters` is set, which only `Fader_MeteorSmash_AOE` does
-   (35 to 45, blended halfway towards straight up, radius 5 m). It is not one of the fight's
-   attacks; the meteor rain spawns `Fader_WallOfFire_AOE`. It is the Fader's arrival:
-   `offeraltar_fader` lists it in `m_spawnBossDoneffects`, and `OfferingBowl.DelayedSpawnBoss`
-   creates it and calls `Setup` with the new Fader as owner, once per summon, 25 s after the
-   offering, where the Fader lands, 14 to 20 m from the offering point. `ForceJump` sets the
-   rigidbody's velocity directly and has no RPC, so it only works on the machine that owns the
-   character. In vanilla the altar's owner is a client, whose own player is thrown and usually
-   takes fall damage on landing. Here the altar's location proxy, and so the summon and its AoE,
-   are the server's, so the launch landed on the server's copy of each player, whose position the
-   player's client overwrites: nobody was thrown and nobody took the fall. The rest of `ForceJump`
-   still ran on the copy. It broadcast the jump animation trigger, and `Player.OnJump` sent
-   `UseStamina` to the real client, so the player lost a jump's worth of stamina standing still,
-   and counted `Jumps` in the server's own profile.
-
-   `PlayerLaunch.cs` handles it from a prefix on `Character.ForceJump`. On the server, a call on a
-   `Player` the server does not own is sent to that player's client with the velocity and the
-   effects flag vanilla passed, and skipped on the copy, so the copy gets no velocity, no trigger,
-   no stamina message and no stat. The client checks the target is still its own character and
-   calls `ForceJump` on it, which is exactly what vanilla's owner would run, so the stamina,
-   animation, `Jumps` stat and the fall damage on landing all happen there. This goes further than
-   vanilla multiplayer, where only the altar owner's player is thrown and everyone else's copy got
-   what the server's copy got here: now every player within the 5 m is thrown. To see it, stand
-   within 5 m of where the Fader lands when it is summoned. The velocity is the one vanilla
-   computed on the server, from the hit point towards the AoE's centre and scaled by distance.
-   Recomputing the direction on the client from its own position was rejected: which players are
-   hit, how hard, and how much damage they take are all judged from the server's view of them, and
-   the launch should agree with those. The launch is sent before the AoE's damage message, in the
-   order vanilla applies them. Every other `ForceJump` caller leaves players the server does not
-   own alone: `Character.Jump` runs where the character is controlled, `Catapult` launches only
-   the characters each machine owns, and `GrapplingPoint` runs on the grappling player's own
-   client, so none of them changes. The one exception to watch is `CharacterAnimEvent.Jump`, which
-   calls `Character.Jump(force: true)` from an animation event on every machine animating the
-   character. Today the only clip with that event is the Tick's "Bite Attack", and a Tick is not a
-   player, but a `Jump` event on a player clip after a game update would make the server's animator
-   of each player's copy forward a second jump, so re-read `ForceJump`'s callers and the animation
-   events then. Each forwarded launch is logged, and so is one dropped because the client has gone.
-
-   The other local-only push in `Aoe.OnHit`, `m_knockBackForce` through `Character.ApplyPushback`,
-   is not the same shape. Three AoEs set it, `staff_thunderblood_aoe` (25) and
-   `fx_UpgradeStation_Success` and `_Fail` (8 and 13), and all three are spawned by a client, so no
-   server-owned AoE pushes a player that way. The reverse does happen: the thunderblood staff's
-   knockback and the upgrade station's success and failure bursts push server-owned creatures,
-   such as tames standing nearby, from the client. That is handled separately, under
-   [What the server cannot do](#what-the-server-cannot-do), as a push on a creature.
-
-A tenth reads a player's status effects where only their own client has them:
-
-10. **Status effects the server cannot see.** `SEMan` keeps a character's list of active status
-    effects only on its owner; every other machine sees at most the attribute bitmask in the ZDO.
-    Two creature checks read that list for players. `MonsterAI.PheromoneFleeCheck`, run by the
-    owner when an alerted creature can see its target and has it within attack range, looks
-    through the target player's effects for an `SE_Stats` with `m_pheromoneFlee` whose
-    `m_pheromoneTarget` has the creature's name, and makes the creature flee and pick a new target
-    later. `Character.UpdatePheromones`, run by the
-    owner every 5 s on creatures that have a `m_pheromoneLoveEffect`, looks through every player's
-    effects for an `SE_Stats` whose `m_pheromoneTarget` has the creature's name, and plays the
-    effect and alerts the creature once for each. In the game data the first is the Anti-Sting
-    Concoction (`Potion_BugRepellent`, deathsquitos) and the second the troll love potion
-    (`Potion_TrollPheromones`, trolls, whose love effect `fx_troll_love` is networked). In vanilla
-    the owner is normally the client of the player drinking it, so it works for that player. Here
-    the server owns every creature and its copy of each player has an empty list, so neither mead
-    ever did anything.
-
-    `PlayerEffects.cs` has each client publish its active pheromone effects on its own player's ZDO,
-    which it owns, as a list of name hashes under one key. It builds the list after every
-    `SEMan.Update` on its own player, the same place vanilla updates the attribute bitmask, and
-    writes only when the list changes, so an effect that expires, is removed or ends with the
-    player's death drops out on the next update. It tracks the ZDO by id, since ZDOs are pooled,
-    so a new character after death or a relog starts from nothing. It publishes nothing else,
-    because the cost is not the write but every send afterwards: Valheim
-    serialises a ZDO's whole data each time it sends it, and a player's ZDO is sent continuously
-    as they move, so anything published rides along on every update to every peer. With only the
-    meads, the key does not exist for a player who has never drunk one. When the list empties it is
-    written as an empty array rather than removed, because a receiving machine merges incoming ZDO
-    data into what it has and never deletes a key, and `ZDO.RemoveByteArray` does not even mark the
-    ZDO changed, so a removed key would linger on the server with the last list. The client logs
-    each pheromone effect entering and leaving the list.
-
-    `Pheromones.cs` extends both checks on the server with postfixes, for players it does not own.
-    It maps each published hash to the `SE_Stats` in `ObjectDB`, where both meads are registered,
-    and applies vanilla's test to it: fleeing needs `m_pheromoneFlee` and the target player's own
-    list, and attraction runs on the same 5 s tick, found by repeating vanilla's timer test in a
-    prefix. Attraction differs from the literal code in one respect. Vanilla looks at every player,
-    but only the owner's own player ever has a list, and the owner is a player whose area the
-    creature is in. The server sees everyone, so it counts only players whose active area holds the
-    creature; otherwise one player's potion would draw trolls near every other player in the world.
-    The first flee and the first attraction of each creature prefab per session are logged, and
-    so, once a session, is a published hash that is not a pheromone effect in `ObjectDB`, which
-    would mean a game update renamed or unregistered a mead and it silently stopped working.
-
-An eleventh edits the profile of whichever machine owns the object:
-
-11. **A bed's spawn point cleared on the wrong machine.** `WearNTear.Destroy` runs on the piece's
-    owner and, for a bed, calls `Game.RemoveCustomSpawnPoint` with the bed's spawn point, which
-    clears the local profile's custom spawn point if it is exactly that point. Every way a bed goes
-    ends there: removal with the hammer through `RPC_Remove`, damage from any source through
-    `RPC_Damage` and `ApplyDamage`, and wear and lost support through `UpdateWear` and
-    `ApplyDamage`, all on the owner. Nothing else on an owner touches spawn points: the bed's own
-    `Interact` sets them on the player's client, and `Game.FindSpawnPoint` reads and clears them
-    there. Vanilla assumes the owner is the player who claimed the bed, which `Bed.Interact` does
-    without any need to sleep in it. Here the owner is the server, so only the server's profile was
-    tested, which has no custom spawn point, and the player kept a spawn point at a bed that no
-    longer exists. Their map kept the bed pin, which `Minimap` rebuilds from the profile,
-    and on their next death the game loaded the area around the old bed, waited, found no bed
-    within 1 m and only then cleared the point and sent them to the start.
-
-    `BedSpawnPoint.cs` handles it from a prefix on `WearNTear.Destroy`. For a claimed bed the server
-    owns, it sends every client the owner's player id, from the bed's `s_owner`, and the bed's spawn
-    point. The client whose own profile has that player id runs vanilla's `RemoveCustomSpawnPoint`
-    against it, so the same exact-point test decides, and the map pin disappears on the minimap's
-    next update. Broadcasting rather than looking the owner up by character reaches a player who is
-    connected but has no character at that moment: dead and waiting to respawn, loading in, or held
-    at login by the server side character check. It also covers two players sharing a copied
-    character id, and tells no client anything the bed's own ZDO does not already. With server side
-    characters the change reaches the stored character on the client's next save. A player who is
-    not connected at all gets nothing: vanilla has no way to reach an absent player either, and
-    the only record of their spawn point is their character. Editing the stored character on the
-    server for them was rejected as far more machinery than a stale pin and one slow respawn
-    justify, and vanilla's check at their next death already clears it. Each destroyed claimed bed
-    is logged with its owner and point, and the owner's client logs what it did, printing both
-    points in full when it keeps a spawn point that is not this bed's.
-
-A twelfth asks the local player a question on the server's behalf:
-
-12. **A ward check that throws on the server.** `PrivateArea.CheckAccess` asks every enabled ward
-    containing a point whether "the local player" may work there, through `HaveLocalAccess`, which
-    tests the ward's creator against the local profile and then dereferences
-    `Player.m_localPlayer`. Every caller but one is a hover text or an interaction on the player's
-    own client. The exception is `Attack.SpawnOnHitTerrain`, which checks before placing a terrain
-    op. It is reached from any weapon with `m_spawnOnHitTerrain`, where only the five pickaxes
-    spawn a terrain op, on their player's own client, and from `Aoe.OnHit` when an AoE with
-    `m_spawnOnHitTerrain` hits the ground. Three such AoEs run on the server, because the server
-    owns what spawns them: `BlobLava_explosion` and `writhan_explosion`, the lava blob's and the
-    Writhan's explosions from their attack and their death, both digging `digg_blobLavaExplosion`,
-    and `UnstableLavaRock_explosion` from the Ashlands prop breaking. None of them is set up with an
-    attacker. Inside an enabled ward the check threw out of the fixed-update loop, so that frame's
-    remaining AoE, effect area, bird and weapon-trail updates were skipped and the shared update
-    list was left uncleared. The explosion's own hits after the terrain collider were lost, since
-    `CheckHits` does not sort them, and the lava blob's and the Writhan's explosions, which hit at
-    the end of their lifetime, also skipped the `ZNetScene.Destroy` that follows, so the explosion
-    object was never removed.
-
-    The fourth AoE with a terrain op, `siegebomb_explosion`, does not reach this on the server.
-    Loading a catapult sends `RPC_RequestOwn`, its `Vagon` hands the catapult to the loader, the
-    policy's grace for a peer's claim leaves it there for 3 s or more, and the shot comes 1.4 s
-    after loading, so the loader's client spawns the projectile and its explosion and vanilla's
-    check runs there with the loader's own access. A catapult the server owns fires nothing
-    anyway, since only the loading client sets `m_loadStack`. If the server ever does fire one, a
-    siege bomb is a player's act and should be judged by the firer's access, the sender of
-    `RPC_Shoot` captured through `RpcTakeover`, not by the rule below.
-
-    `WardAccess.cs` answers it on the server from a prefix on `HaveLocalAccess`, which leaves
-    vanilla's check alone wherever there is a local player, so a player-hosted session keeps the
-    host's. In vanilla the question goes to whichever client owns the exploding thing, which is a
-    player near it, so a lava blob bursting in a base usually craters the ground of the players
-    who live there, and is stopped only when a stranger's client happens to own it. The server
-    reproduces that: a ward lets the terrain op through when a player whose active area holds the
-    ward is its creator or on its permitted list, and blocks it otherwise, which also covers
-    nobody being nearby, when vanilla would not be simulating the explosion at all. The creator
-    test against the server's own profile is dropped, since that profile belongs to nobody. The
-    first answer each way for each ward per session is logged.
-
-A thirteenth waits for a local player before doing something for everyone:
-
-13. **Hugin's Ashlands ocean hint.** `Ship.TakeAshlandsDamage` runs on a ship's owner every fixed
-    update. Once the hull is in Ashlands water, and the ship is not one built for it, it sets the
-    world key `AshlandsOcean`, but only if `Player.m_localPlayer` exists, and then again every 10 s
-    for as long as it stays there. The `Tutorial` component shows the `ashlandsocean` text, Hugin's
-    warning about the burning sea, to every client once that key exists, and each player sees it
-    once. The local player test stands for "a client owns this ship", which in vanilla is always
-    the case for a ship anyone is near, whether they sail it or merely own the zone it drifts in;
-    it is only false on a dedicated server, which vanilla never lets simulate a ship. Here the
-    server owns every ship unless `KeepShipOwnedByDriver` is on, so the key was never set and no
-    player was ever warned.
-
-    A postfix on `TakeAshlandsDamage` sets the key from the server under the same conditions:
-    the ship is not Ashlands-ready, the hull is in Ashlands water by vanilla's own gradient test,
-    and a player whose active area holds the ship is there to have been its owner. It does nothing
-    once the key exists. One deviation: vanilla applies the water test only to ships that have
-    Ashlands damage effects, so a ship without them would set the key anywhere on the map. Of the
-    ship prefabs, `VikingShip`, `Karve` and `Raft` have the effects, `VikingShip_Ashlands` is
-    Ashlands-ready, and `Trailership` has neither, but nothing in the game builds or places a
-    `Trailership`: it appears only in `ZNetScene`'s prefab list, so only the `spawn` console command
-    produces one. The server requires the Ashlands water for every ship, since a key set in the
-    Meadows would bring Hugin's Ashlands warning long before it means anything. Vanilla's 10 s
-    timer only repeats a key that is already set, and a key the server sets takes effect at once,
-    so testing for the key keeps the same world state with a single message. The server logs the
-    ship, its position and the nearby player when it sets the key.
-
-A fourteenth shows a score to a player who is not there:
-
-14. **Archery targets that server-owned shots pass through.** `Projectile.OnHit` runs on the
-    projectile's owner and calls `IHitProjectile.OnProjectileHit` on the collider it hit, an
-    ordinary interface call rather than an RPC. `ArcheryTarget.OnProjectileHit`, on the
-    `piece_ArcheryTarget` piece, sets how long the projectile stays stuck, works out the score and
-    shows it with `Player.m_localPlayer.Message`, unguarded. After that line it records the score
-    and ammo type on the target's ZDO, plays the bullseye and hit effects, raises the shooter's
-    skill and tells `OnHit` to go on and stick the projectile. A player's own arrows belong to that
-    player's client and are unaffected. Projectiles the server owns threw at the message and lost
-    all of the rest, flying on through the target and throwing again on the next frames: turret
-    bolts, since a turret fires on its owner, creature arrows, spears and other ranged shots, and
-    the `radiation` bolts the `Radiator` on a working eitr refinery or a dropped Eitr gives off.
-    Nothing else in `ArcheryTarget` needs a local player on the server; its other uses are hover
-    text and interaction on the player's client.
-
-    A prefix on `OnProjectileHit` runs the method on the server as vanilla wrote it, minus the
-    message, whenever there is no local player. There is no score message to show: the shooter
-    of a server-owned projectile is never a player. A tame's hit on a target still raises the
-    shooter's skill, which for a summoned archer is forwarded to its summoner as in item 7. The
-    method is copied, so re-read it after a game update. The first server-side hit per session is
-    logged.
-
-A fifteenth asks the local player about states only the player's own client knows:
-
-15. **Creatures that see an admin in ghost mode, a flying admin, or a player in a cinematic.**
-    Creature AI runs on the creature's owner and asks each player it considers whether they are
-    hidden. `BaseAI.CanHearTarget`, `CanSeeTarget` and the hunting fallback in `FindEnemy` skip a
-    player for which `InDebugFlyMode()` or `InGhostMode()` is true, and `MonsterAI.UpdateSleep`
-    skips one for which `InGhostMode()` or `IsDebugFlying()` is. `FindEnemy` also skips
-    `Player.m_localPlayer` while `CinematicsManager.IsPlaying()`. `IsDebugFlying` reads the
-    player's own `s_debugFly` ZDO flag for anyone else, but `InDebugFlyMode` and `InGhostMode` read
-    only local fields, and the cinematic test only ever matches the owner's own player. So the
-    server's creatures saw, heard and hunted an admin flying or in ghost mode, and woke for one in
-    ghost mode (waking already used `IsDebugFlying`, so flying never woke them). They also closed
-    in on a player watching a cinematic. In this game version those are the boss dream videos
-    played on the next sleep after a kill or a rune stone, the outro and end credits, and the
-    admin `cinematic` command; the new-world intro is the text viewer, not a cinematic, since
-    every `CinematicsManager` has `m_introOnNewWorld` off and plays its video only at the main
-    menu. Damage stays blocked on the player's own client during a cinematic, so they only found
-    the creatures on top of them when it ended.
-
-    `PlayerFlags.cs` has each client publish ghost mode and "a cinematic is playing" as two bits of
-    one int on its own player's ZDO, from the same `SEMan.Update` postfix that publishes the
-    pheromone effects, written only when the value changes, so the key never appears for a player
-    who has not used either, and the client logs each change. `CreatureSenses.cs` reads them on the
-    server. A postfix on `Player.InGhostMode` reports the published bit for players the server
-    does not own, which covers every caller at once; `InGhostMode` is virtual and so cannot be
-    inlined into its callers. `InDebugFlyMode` is a plain field getter the JIT may inline, so
-    instead of patching it, prefixes on the static `CanHearTarget` and `CanSeeTarget` hide a player
-    for whom `IsDebugFlying` holds. `FindEnemy` is replaced on the server by a copy that skips a
-    player in a published cinematic and uses `IsDebugFlying` in its hunting fallback, so re-read it
-    after a game update. Players a machine owns, and every client, are untouched.
-
-    Every other `InGhostMode` caller on the server now sees the bit too, as vanilla's owner does
-    for its own player. `Character.ApplyDamage` marks a creature a ghost-mode admin damages as
-    cheated, and `EggHatch` does not hatch while a ghost-mode admin is the closest player, which
-    keeps crypt chests, ghost skulls, greydwarf surprises, seeker eggs and bone piles shut around
-    them. The Creatures mod's hearing postfix on the same `CanHearTarget` overload runs even when
-    the prefix skips the original, and tested `InDebugFlyMode`, so it now uses `IsDebugFlying` to
-    agree. The first time the server honours each state per session is logged.
-
-A sixteenth covers two small things only the owner's own player ever saw:
-
-16. **The summon limit message and the pet rock's faces.** `Tameable.UnsummonMaxInstances` runs
-    on a summon's owner whenever it is told to follow a player and has a summon limit,
-    `s_maxInstances`: of the summons the staffs cap, only the Dead Raiser's skeletons and the
-    spirit caller's animals have a `Tameable` to be told anything. It unsummons the oldest of that
-    player's summons over the limit and tells `Player.m_localPlayer` "max summons reached". A new
-    summon's first command runs on the
-    caster's client, which still works. The server reaches it when it takes a summon over and
-    `Tameable.UpdateSavedFollowTarget` re-commands it to follow its player, and the message was
-    dropped; the summons are already trimmed by then, so it only shows when the server counts more
-    of them than the caster's client could see, which makes it rare rather than impossible. None
-    of the capped summons is commandable by hand. A prefix on `UnsummonMaxInstances` repeats
-    vanilla's count on the server and sends the message to the summoner, the follow target, whose
-    `Player.Message` forwards to their client. It costs one pass over the characters per follow
-    command, and is logged when it fires.
-
-    `Pet` is on `Placeable_HardRock`, the pet rock. Every 7 s its owner, while the rock is not on
-    screen for it, picks a face from nearby players' status effects (soft death, rested, camp
-    fire, burning, freezing, poison, encumbered, smoked), the rock's love points and the static
-    `Player.LastEmote`, and otherwise now and then at random, then writes it to the ZDO and
-    broadcasts it; the face is purely visual. The owner's own player is the only one whose
-    effects and emote it can see, so in vanilla the rock reacts to whoever owns it. On the server
-    it saw no effects and no emotes, and only its random faces and love points reached anyone.
-    Publishing the eight effects on every player's ZDO for this was rejected in item 10, since a
-    key rides on every send once written. Instead the server no longer picks faces, and each
-    client runs a copy of vanilla's choice for a server-owned rock itself, from its own player's
-    effects and emotes, and applies the face locally without writing the ZDO. That is vanilla's
-    own rule, the owner's player and not while the rock is on screen, on every client, so each
-    player sees the rock react to them. Players may see different faces at once, where vanilla
-    showed everyone the owner's. The first local face change per session is logged on the client.
-    Both copies need a re-read after a game update.
-
-To find more after a game update, scan the decompiled source for `Player.m_localPlayer`
-dereferences inside `RPC_*` methods that have no null guard, then check how each RPC is invoked:
-ones sent to a specific peer are client-only and safe, while owner-targeted and `Everybody` ones
-now execute on the server. Follow the ordinary methods those RPCs and other owner-run code call as
-well, since the Frost Foundry's dereference sat in `SpawnItem`, not in the RPC. And look for writes
-to `Game.instance.GetPlayerProfile()` or `Game.instance.IncrementPlayerStat` in owner-run code,
-and for `Game` methods that edit `m_playerProfile` directly, such as `Game.RemoveCustomSpawnPoint`,
-which a search for `GetPlayerProfile()` does not find: they throw nothing and land in the server's
-own profile, or behind a comparison with `Player.m_localPlayer` they are simply never counted.
-The same goes for owner-run code that writes another character's state, as a tamed creature's
-`RaiseSkill` writes its summoner's `Skills`: if that character is a player, the server only has a
-shell of it, and the write lands in a copy that is never saved.
-
-## Game updates
-
-Valheim 1.0 reworked the zone system substantially and the mod was ported to match. What changed,
-for whoever has to do this again:
-
-- Zone coordinates went from `Vector2i` to `Vector2s`, and `ZoneSystem.m_activeArea` /
-  `m_activeDistantArea` were replaced by `SimulationDistance`, a server-synced value read through
-  `ZNet.GetSyncedSimulationDistance()`.
-- Whether a point is in an active area is now a continuous distance test
-  (`ZNetScene.InActiveArea(position, zone)`) rather than a box of zone indices, so the ownership
-  policy measures coverage per object position and resolves one decision per sector from it.
-- `SpawnSystem.UpdateSpawning` gained a third spawn source, the alt-biome spawners on
-  `Heightmap.m_cornerAltBiomes`, plus `groupSalt` arguments. Missing this silently disables part of
-  the world's creature spawning, which is exactly the kind of drift a whole-method replacement is
-  meant to make visible.
-- Mounts (`Sadle`) and carts (`Vagon`) hand ownership to their user and never renew it, so they now
-  take the same lease treatment ships already had.
-- `ZoneSystem.Start` is patched to apply the simulation distance, because
-  `ZNet.ApplySimulationDistance` skips ZoneSystem when its instance does not exist yet and on a
-  server that handshake runs during `ZNet.Awake`.
-
-`ZoneSystem.Update`, `RandEventSystem.FixedUpdate`, `ZNetScene.RemoveObjects` and the ownership pass
-in `ZDOMan` were structurally unchanged.
+- **sends/s** near `ZdoSendRate`; much lower means the server's frame rate is the limit.
+- **full** sends left changes for the next send, which is harmless alone. **fell behind** means
+  changes are piling up and creatures stutter for that player. **held back** means the window was
+  still full.
+- **Steam queue** staying near 100 ms or more while the player falls behind means the Steam rate is
+  the limit.
+- **send work** is server CPU spent packing updates; it grows with base size and send rate.
+- **Most sent** is the share of bytes by prefab.
+
+## Vanilla code that assumes a client owner
+
+A server that owns everything lacks local state vanilla assumes an owner has: a local player, its
+profile, its status effects, the joints and triggers on its own machine. Each fix below is logged
+when it acts.
+
+| Vanilla assumption | What broke | Fix |
+| --- | --- | --- |
+| `Everybody` RPCs run only where the object is instantiated | `Pickable.RPC_Pick`, `Leviathan.RPC_Left`, `MusicVolume.RPC_PlayMusic` and `Trap.RPC_OnStateChanged` threw on `Player.m_localPlayer`; picking dropped nothing | `LocalPlayerRpcPatches.cs` |
+| A ship's owner has a local player | `Ship.UpdateSailSize` threw every frame of raising or lowering a sail | `HeadlessPatches.cs` |
+| `Floating.s_waterVolumeMask` is set by some `Floating.Awake` | Unset on a fresh server, so `GetWaterLevel` found no water and boats in open sea fell to the bottom | `WaterQueries.cs` sets it at startup |
+| A client simulates only once its whole area is loaded | A hull measuring water in a zone not yet built lost buoyancy | `ShipPhysicsPatches.cs` holds it until the zones exist |
+| `CreateLocalZones` keeps near zones alive | It returns after spawning one zone, so the rest aged out and took their water with them | `ZoneSystemPatches.cs` refreshes every near zone |
+| `ZNet.GetReferencePosition()` is the player | The server build pins it outside the world, so `StaticPhysics` never ran and felled logs would never settle | `SlowUpdatePatches.cs` |
+| A cart's attach joint exists on its owner | The server would detach a cart being pulled | `VehiclePatches.cs` leases it to the puller |
+| A hooked fish's float is local | The policy took the fish mid-fight and it stopped fighting | `HookedFish.cs` |
+| The loading client owns the catapult when it fires | The ammo count lived only on the loader, and a reclaim fired nothing | `CatapultLoad.cs` |
+| `ApplyPushback` runs on the creature's owner | Knockback from a client's AoE never moved server-owned creatures | `RemotePush.cs` |
+| One weather per machine, at its camera | One player's raid set the weather for every fire, spawner and hull | `LocalWeather.cs`, `WeatherScope.cs` |
+| Kill rewards go to `Player.m_localPlayer` | No player got defeat keys such as `KilledBat`, or last-hit stats | `KillCredit.cs` |
+| `Aoe.Setup` runs where the AoE is | Breath attacks reached clients with prefab values and did nothing | `TriggerAoeSetup.cs` |
+| The cooking station's owner is the collector | The Frost Foundry threw mid-collect and duplicated items; no cooking or craft stats counted | `CookingCollect.cs`, `StatCredit.cs` |
+| A summon follows its summoner on the summoner's machine | Blood Magic from summons trained the server's copy of the player | `SummonSkill.cs` |
+| Chopping, mining, hits and taming are counted on the owner for the local player | No player earned those stats, so GrindTrees could not unlock | `EarnedStats.cs` |
+| `ForceJump` runs on the character's owner | The Fader's arrival smash threw only the server's copy of each player | `PlayerLaunch.cs` |
+| Status effects are on the owner | The Anti-Sting Concoction and the troll love potion did nothing | `PlayerEffects.cs`, `Pheromones.cs` |
+| A destroyed bed's owner is its sleeper | The player kept a spawn point at a bed that was gone | `BedSpawnPoint.cs` |
+| `PrivateArea.HaveLocalAccess` has a local player | Lava blob and Writhan explosions in a ward threw on the server | `WardAccess.cs` |
+| Only a client's ship sets the Ashlands key | Hugin's Ashlands ocean warning never triggered | `AshlandsHintPatches.cs` |
+| An archery target's hit has a local player to message | Server-owned shots threw and passed through the target | `ArcheryTargetPatches.cs` |
+| Ghost mode, debug flying and cinematics are local | Server creatures hunted admins in ghost mode and players watching a boss dream | `PlayerFlags.cs`, `CreatureSenses.cs` |
+| Summon limit and pet rock react to the owner's player | The "max summons" message was lost; the pet rock ignored everyone | `SummonCapPatches.cs`, `PetFaces.cs` |
+
+To find more after a game update, look in owner-run code and owner-targeted or `Everybody` RPCs for
+unguarded `Player.m_localPlayer`, for writes to `Game.instance.GetPlayerProfile()` or other `Game`
+methods that edit the local profile, for statics only an `Awake` or a guarded call site initialises,
+for code that keys off `GetReferencePosition()`, and for owner-run code that writes another
+character's state, which on the server lands in a copy of the player that is never saved.
+
+## Development
+
+### Building
+
+```bash
+dotnet build src/ServerAuthority/ServerAuthority.csproj -c Release
+```
+
+The game's assemblies are found under the usual Steam locations, or set
+`VALHEIM_MANAGED=/path/to/valheim_server_Data/Managed`. Set `VALHEIM_PLUGINS` to a BepInEx plugins
+folder to have each build copied there.
+
+### Debug tools
+
+A plain build leaves out every *debug* setting and testing tool, and is the one to distribute. For
+testing:
+
+```bash
+dotnet build src/ServerAuthority/ServerAuthority.csproj -c Release -p:DebugTools=true
+```
+
+The startup line listing the effective configuration says which kind of build is running.
+
+### Spawn requests
+
+With `Debug.EnableSpawnRequests` on, the server reads `BepInEx/config/serverauthority_spawn.txt`,
+acts on each line next to the first connected player, and empties the file. It is a cheat hook
+guarded only by access to the server's files, and the only route to spawning on a dedicated server,
+where `devcommands` cannot run from a client.
+
+| Line | Does |
+| --- | --- |
+| `<Prefab> <count> [tame]` | Spawns, optionally tamed. |
+| `water` | Re-runs the nearest sailable water report for the player. |
+| `diag` | What the server can see of the water at the player. |
+| `owners` | What the server owns around the player, by prefab. |
+| `hulls` | Each ship's five water sample points, their zones, and whether buoyancy is on. |
+| `weather [env\|clear]` | Forces or releases the server's environment, or lists them. |
+| `event <name>`, `event stop` | Starts or stops a random event at the player without flagging anyone as a cheater. |
+| `removeships` | Destroys every instantiated ship. |
+
+### After a game update
+
+```bash
+dotnet run --project tools/PatchCheck -c Release -- \
+  src/ServerAuthority/bin/Release/ServerAuthority.dll \
+  ~/.local/share/Steam/steamapps/common/Valheim/valheim_Data/Managed
+```
+
+`PatchCheck` resolves every `[HarmonyPatch]` target. Then re-read the vanilla methods the mod copies
+or replaces against a fresh decompilation: `ZDOMan.ReleaseZDOS`, `ZoneSystem.Update` and
+`IsActiveAreaLoaded`, `ZNetScene.CreateDestroyObjects` and `OutsideActiveArea`,
+`SpawnSystem.UpdateSpawning`, `RandEventSystem.FixedUpdate`, `Player.Save` (player data version),
+`EnvMan.UpdateEnvironment` and `GetBiome`,
+`CookingStation.RPC_RemoveDoneItem` and `SpawnItem`, the stat counting in `TreeBase`, `TreeLog`,
+`MineRock`, `MineRock5`, `Character.RPC_Damage` and `Tameable.Tame`, `BaseAI.FindEnemy`,
+`ArcheryTarget.OnProjectileHit`, `Tameable.UnsummonMaxInstances`, `Pet`, and the RPC replacements
+`Pickable.RPC_Pick` and `Trap.RPC_OnStateChanged`. `RESEARCH.md` records
+how Valheim distributes authority and what earlier game versions changed.
+
+### Patching RPC methods
+
+Valheim invokes RPC methods through `Delegate.DynamicInvoke`. Mono can fail to invoke a Harmony
+replacement that way (`BadImageFormatException: Method has zero rva`) and then abort the process
+while formatting the exception, with no error logged. This killed a live server on
+`Container.RPC_RequestOpen`, and a patch on `ZNet.Disconnect` once looped the same exception every
+frame. Once it starts it can poison every patched method in the process.
+
+So do not patch an RPC method unless nothing else will do. Five remain: `Pickable.RPC_Pick`,
+`Trap.RPC_OnStateChanged`, `Leviathan.RPC_Left` and `MusicVolume.RPC_PlayMusic`, which throw at the
+call site otherwise, and a postfix on `ZNet.RPC_ServerSyncedPlayerData`. Replacing a registered
+handler with an ordinary method through `RpcTakeover.cs` is safe.
+
+### Test rig
+
+`tools/testserver/` holds a launcher and a watchdog for a test server. The launcher saves every two
+minutes and points `XDG_CONFIG_HOME` at `server_config/`, so a server and a game client on one Linux
+account do not share and overwrite each other's Unity preferences. The watchdog restarts the server
+and keeps each crashed run's log with a summary, since a Mono abort leaves no error in the log.
 
 ## Layout
 
@@ -1903,49 +406,63 @@ in `ZDOMan` were structurally unchanged.
 src/ServerAuthority/
   Plugin.cs               Entry point, session detection, game version check
   ModConfig.cs            Configuration
-  OwnershipPolicy.cs      Applies the rules to live ZDOs
-  OwnershipLeases.cs      Leases keeping an object with one client: mounts, carts, fish, catapults
-  HookedFish.cs           Leases a hooked fish to its fisher for as long as it is on the line
-  CatapultLoad.cs         Leases a loaded catapult to its loader long enough for the shot
-  SimulationAnchors.cs    Connected players, which replace the server's unused reference position
-  ServerViewpoint.cs      Where a headless server stands when the game asks a question about "here"
-  WaveField.cs            Deterministic wind and the water clock, so every machine computes one sea
-  WindMath.cs             The anchor arithmetic shared by the client's sea and the server's winds
-  LocalWeather.cs         The weather a player standing at any position would settle on
-  LocalWind.cs            Wind per position and per hull on the server, with Moder per hull
-  WindBlend.cs            The pure arithmetic of the blended wind range, free of game types
+  EffectiveSettings.cs    Logs the effective configuration at startup
+  OwnershipMode.cs        Always or Vanilla
+  OwnershipPolicy.cs      Applies the ownership rules to live ZDOs
+  OwnershipLeases.cs      Leases keeping an object with one client
+  HookedFish.cs           Leases a hooked fish to its fisher
+  CatapultLoad.cs         Leases a loaded catapult to its loader
+  SimulationAnchors.cs    Connected players, in place of the server's reference position
+  ServerViewpoint.cs      Where a headless server stands when the game asks about "here"
+  Waterborne.cs           Which prefabs float, for ServerOwnsWaterborne
+  HullWater.cs            A ship's water sample points and whether their zones exist
+  WaterQueries.cs         Initialises the layer mask Floating's water lookups need
+  WaveField.cs            Deterministic wind and the water clock
+  WindMath.cs             Wind anchor arithmetic shared by client and server
+  LocalWeather.cs         The weather a player standing at a position would have
+  LocalWind.cs            Wind per position and per hull on the server
+  WindBlend.cs            Blended wind range arithmetic
   WindRange.cs            The wind range as a function of position and world time
-  HullWindRange.cs        The per-anchor wind range a ship's owner writes for its crew
-  ModerHeading.cs         The per-anchor Moder heading a server writes to a ship for its crew
-  WeatherScope.cs         Lends EnvMan a position's weather around one consumer call
-  WaveSync.cs             The wave field diagnostic, keyed so two machines' logs can be compared
-  WaterQueries.cs         Initialises the layer mask Floating's water lookups depend on
-  KillCredit.cs           Sends a kill's defeat key and last hit to the players who earned them
-  TriggerAoeSetup.cs      Carries a creature's trigger AoE setup to every client's copy of it
-  CookingCollect.cs       Collects from cooking stations on the server, crediting the collecting player
-  StatCredit.cs           Counts a stat, item craft or skill gain for one player, sent by the server
-  PlayerLaunch.cs         Sends a launch aimed at the server's copy of a player to their client
-  BedSpawnPoint.cs        Tells a destroyed bed's owner to drop it as their spawn point
-  WardAccess.cs           Answers a ward's access check on the server from the players near it
-  PlayerEffects.cs        Publishes each player's active pheromone effects on their own ZDO
-  PlayerFlags.cs          Publishes ghost mode and cinematic playback on each player's own ZDO
-  CreatureSenses.cs       Hides ghost-mode, flying and cinematic-watching players from server AI
-  PetFaces.cs             Picks a server-owned pet rock's face on each client from its own player
-  RemotePush.cs           Sends a client's push on a server-owned creature to the server
-  Pheromones.cs           Lets the anti-sting and troll love meads work on server-owned creatures
-  SummonSkill.cs          Sends a summon's skill gain to its summoner's own client
-  EarnedStats.cs          Sends chopping, mining, hit and taming stats to the player who earned them
-  AchievementGate.cs      Lets achievements count on a Server Authority server despite BepInEx
-  RpcTakeover.cs          Replaces a vanilla RPC handler on the server with one that wraps or redoes it
-  Integrity/              Mod manifest, character storage, validation, and both ends of the protocol
-  Patches/                One file per subsystem, each explaining what vanilla does and why it changes
-tools/PatchCheck/              Resolves every patch target against the game assembly
-RESEARCH.md                    How Valheim distributes authority, and why the old mod broke
+  HullWindRange.cs        The wind range a ship's owner writes for its crew
+  ModerHeading.cs         Moder's heading the server writes to a ship
+  WeatherScope.cs         Lends EnvMan a position's weather around one call
+  CreaturesRaids.cs       Valheim Creatures' raids, bound by reflection
+  WaveSync.cs             The wave diagnostic
+  ServerPerformance.cs    Performance report and slow frame warnings
+  NetworkStats.cs         Per player send counters and the network report
+  SteamSendRate.cs        Applies SteamSendRateKiB
+  ServerControl.cs        Reads the server tool's command files
+  WorldSeed.cs            -seed for a new world
+  KillCredit.cs           Defeat keys and last hits for the players who earned them
+  TriggerAoeSetup.cs      A creature's trigger AoE setup carried to every client
+  CookingCollect.cs       Cooking station collects on the server
+  StatCredit.cs           A stat, craft or skill gain sent to one player
+  SummonSkill.cs          A summon's skill gain sent to its summoner
+  EarnedStats.cs          Chopping, mining, hit and taming stats
+  PlayerLaunch.cs         A launch aimed at a player sent to their client
+  RemotePush.cs           A client's push on a server-owned creature
+  PlayerEffects.cs        Each player's pheromone effects on their ZDO
+  Pheromones.cs           Pheromone meads on server-owned creatures
+  PlayerFlags.cs          Ghost mode and cinematic playback on each player's ZDO
+  CreatureSenses.cs       Hides ghost, flying and cinematic-watching players from server AI
+  PetFaces.cs             The pet rock's face picked on each client
+  BedSpawnPoint.cs        A destroyed bed's spawn point cleared for its owner
+  WardAccess.cs           Ward access answered on the server
+  AchievementGate.cs      Achievements on a Server Authority server
+  RpcTakeover.cs          Replaces a vanilla RPC handler on the server
+  NearestWater.cs         Debug: nearest sailable water
+  SpawnRequests.cs        Debug: the spawn request file
+  Integrity/              Mod manifest, validation, character storage and both ends of the protocol
+  Patches/                Harmony patches, one file per subsystem
+tools/PatchCheck/         Resolves every patch target against the game assembly
+tools/testserver/         Test server launcher and watchdog
+tools/package/            Windows watchdog, log tail and log collection scripts for the server zip
+RESEARCH.md               How Valheim distributes authority
 ```
 
 ## Credit
 
-The approach was worked out by reading Valheim 0.221.12 directly, and by studying
+The approach came from reading Valheim directly and from
 [ddormer/valheim-serverside](https://github.com/ddormer/valheim-serverside) (MIT), the unmaintained
-Serverside Simulations mod that solved this problem first. The set of headless fixes in
-`Patches/HeadlessPatches.cs` in particular is its hard-won knowledge.
+Serverside Simulations mod that solved this problem first. The headless fixes in
+`Patches/HeadlessPatches.cs` in particular are its hard-won knowledge.
