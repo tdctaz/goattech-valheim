@@ -71,7 +71,7 @@ in `BepInEx/plugins/` on both. Older packs shipped a `start_server_bepinex.sh` t
 variables for a Doorstop 4 library, and the server starts with no BepInEx at all.
 
 The server log should say `Server Authority active. Ownership mode: Always.` The mod warns at startup
-when the game version differs from the one it was verified against (1.0.16).
+when the game version differs from the one it was verified against (1.0.17).
 
 ## Configuration
 

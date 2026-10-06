@@ -383,3 +383,26 @@ Measured on the loopback test server, one player, 30 tame wolves hunting deer:
   server reclaims ownership within two seconds, and `ZDO.SetOwner` marks the chunk, which covers it.
 - 1.0 has a `-simulationdistance 0-6` server argument (2 is the classic 5x5 zones, 1 is 21 zones, 0
   is 9). Lowering it is the cheapest way to cut server CPU if that ever becomes the limit.
+
+
+## 9. Re-verification against Valheim 1.0.17
+
+A hotfix. Diffing the publicized 1.0.16 and 1.0.17 client assemblies changes five files, and none of
+the methods any GoatTech mod patches or replaces is among them. The dedicated server's assembly
+carries the same changes, and `assembly_utils` is unchanged. `PatchCheck` resolves every target for
+all three mods against both the client and the dedicated server assemblies.
+
+What moved:
+
+- `ZDOMan.AddObjectsPerChunk`, which builds the incremental save, now also writes a chunk that holds
+  persistent objects but has no entry in the last save's chunk mapping, even when it is not marked
+  dirty. Before, such a chunk was skipped and its objects never reached the save. `RPC_ZDOData`
+  still does not mark chunks dirty, so the note in section 8 stands for chunks already in the save.
+- Item variants are clamped to the item's icons. `ItemDrop.Start` and the `Inventory.AddItem`
+  overload that takes a variant reset an out of range variant to 0 through the new
+  `ItemDrop.ResetVariantIfInvalid`, `ItemData.GetIcon` falls back to the first icon, and
+  `VariantDialog.Setup` lists no more variants than icons. No mod touches item variants.
+
+The item, raid and location data the mods depend on still matches in the new server bundles: the
+staffs, root armor and tower shields Rebalanced changes carry the vanilla values its README quotes,
+and every raid name Creatures uses exists in the main scene or a `LocationList`.
