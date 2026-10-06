@@ -66,7 +66,7 @@ dedicated server and on every client, all at the same version. Valheim Server To
 ### Creatures
 
 - Up to 5 stars, unlocked by killing the faction's boss and hanging its trophy on the sacrificial
-  stones
+  stones; that unlocks the higher stars without making any star more likely
 - Loot scales 1x, 2x, 4x, 6x, 8x, 10x; health and damage follow vanilla's per level rules
 - Colored stars each give a trait:
   - Fast: +40% movement speed, +50% turning speed
@@ -84,6 +84,11 @@ dedicated server and on every client, all at the same version. Valheim Server To
   - Shielded: half damage from magic, a quarter off from arrows and bolts
 - Raids come in waves of every raider at vanilla's most alive, two alive at a time, scaled by the
   players in the area and the base's comfort, and end only when cleared
+  - Raiders and wild creatures ignore each other, so raiders go for the base, not the deer
+  - Raiders head for the base and come back when they stray
+  - Players are told as each wave falls how much of the raid is still to come
+  - Hildir's raids are fought around their boss, who comes once; the rest keep coming at vanilla's
+    numbers until it falls
 - Creatures hit as hard however many players are near; vanilla adds 4% damage per player, and its
   extra health per player stays
 - Stars above two get their own size and tint
