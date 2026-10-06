@@ -75,7 +75,7 @@ namespace ValheimCreatures
             List<string> spawned = new List<string>();
             Vector3 origin = boss.transform.position;
             WaveSpawner.Spawn(ev, data => WaveSpawner.Around(origin, balance.BossWaveDistance, data), "boss wave", boss,
-                spawned);
+                spawned, mostAlive: false);
 
             Plugin.Log.LogInfo(
                 $"{Utils.GetPrefabName(boss.gameObject)} called wave {wave} of {balance.BossWaveCount} from {raid}: " +

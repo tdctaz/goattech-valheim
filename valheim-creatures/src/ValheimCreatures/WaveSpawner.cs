@@ -19,7 +19,7 @@ namespace ValheimCreatures
         private static int _noFloor;
 
         internal static List<ZDOID> Spawn(RandomEvent raid, Func<SpawnSystem.SpawnData, Vector3?> groupCenter,
-            string source, Character tracker, List<string> names)
+            string source, Character tracker, List<string> names, bool mostAlive)
         {
             Begin();
             List<ZDOID> spawned = new List<ZDOID>();
@@ -30,11 +30,43 @@ namespace ValheimCreatures
                     continue;
                 }
 
-                int count = UnityEngine.Random.Range(data.m_groupSizeMin, data.m_groupSizeMax + 1);
-                Group(data, count, groupCenter, source, tracker, names, spawned);
+                if (mostAlive)
+                {
+                    Fill(data, MostAlive(data), groupCenter, source, tracker, names, spawned);
+                }
+                else
+                {
+                    Group(data, GroupSize(data), groupCenter, source, tracker, names, spawned);
+                }
             }
 
             return spawned;
+        }
+
+        internal static int MostAlive(SpawnSystem.SpawnData data)
+        {
+            return data.m_maxSpawned > 0 ? data.m_maxSpawned : GroupSize(data);
+        }
+
+        private static int GroupSize(SpawnSystem.SpawnData data)
+        {
+            return UnityEngine.Random.Range(data.m_groupSizeMin, data.m_groupSizeMax + 1);
+        }
+
+        internal static void Fill(SpawnSystem.SpawnData data, int count,
+            Func<SpawnSystem.SpawnData, Vector3?> groupCenter, string source, Character tracker, List<string> names,
+            List<ZDOID> spawned)
+        {
+            while (count > 0)
+            {
+                int group = Mathf.Clamp(GroupSize(data), 1, count);
+                if (!Group(data, group, groupCenter, source, tracker, names, spawned))
+                {
+                    return;
+                }
+
+                count -= group;
+            }
         }
 
         internal static bool Usable(SpawnSystem.SpawnData data)
@@ -52,7 +84,7 @@ namespace ValheimCreatures
             Placed.Clear();
         }
 
-        internal static void Group(SpawnSystem.SpawnData data, int count,
+        internal static bool Group(SpawnSystem.SpawnData data, int count,
             Func<SpawnSystem.SpawnData, Vector3?> groupCenter, string source, Character tracker, List<string> names,
             List<ZDOID> spawned)
         {
@@ -64,7 +96,7 @@ namespace ValheimCreatures
                     Dropped.Add(data.m_prefab.name);
                 }
 
-                return;
+                return false;
             }
 
             Placed.Add(Describe(data.m_prefab.name, count, center.Value));
@@ -105,6 +137,8 @@ namespace ValheimCreatures
                 }
 #endif
             }
+
+            return true;
         }
 
         internal static string Rejected()

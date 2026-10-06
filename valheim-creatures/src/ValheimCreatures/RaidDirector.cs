@@ -387,7 +387,7 @@ namespace ValheimCreatures
             List<string> names = new List<string>();
             List<ZDOID> spawned = WaveSpawner.Spawn(raid.Template,
                 data => WaveSpawner.Around(players[Random.Range(0, players.Count)], balance.RaidSpawnDistance, data),
-                "raid", null, names);
+                "raid", null, names, mostAlive: true);
             if (names.Count == 0)
             {
                 Plugin.Log.LogInfo(
@@ -449,12 +449,9 @@ namespace ValheimCreatures
 
                 Line line = new Line { Data = data, Next = raid.InArea + Mathf.Max(1f, data.m_spawnInterval) };
                 raid.Lines.Add(line);
-                int count = Due(line);
-                if (count > 0)
-                {
-                    WaveSpawner.Group(data, count, Center(players, balance), "raid", null, names, line.Creatures);
-                    spawned.AddRange(line.Creatures);
-                }
+                WaveSpawner.Fill(data, WaveSpawner.MostAlive(data), Center(players, balance), "raid", null, names,
+                    line.Creatures);
+                spawned.AddRange(line.Creatures);
             }
 
             raid.Spawned = 1;

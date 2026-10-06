@@ -87,10 +87,12 @@ On a dedicated server raids come in waves instead of running for a fixed time:
 - A raid has one wave per player in its area beyond the first, up to five, plus one per 5 comfort at
   the base, between 1 and 8 in all. A lone player in a fresh base faces one wave; a full group in a
   well furnished base faces eight.
-- A wave is one group of every creature in the raid, with the raid's group sizes. It appears about
-  40 m from a player in the raid's area, outside any player base and not under cover, and hunts the
-  players. Each group gets 40 tries, reaching out to twice the distance; a group with no open ground
-  is left out and logged. A wave that finds no open ground at all ends the raid.
+- A wave is every creature in the raid, each as many as vanilla allows alive at once, so every wave
+  of the Elder's raid is 6 greydwarfs, 4 greylings, a shaman and a brute, and two waves alive are
+  twice that. They come in groups of the raid's group sizes, each about 40 m from a player in the
+  raid's area, outside any player base and not under cover, and hunt the players. Each group gets 40
+  tries, reaching out to twice the distance; once a group finds no open ground, the rest of that
+  creature is left out and logged. A wave that finds no open ground at all ends the raid.
 - The next wave comes 2 minutes after the last one appeared, even if it still lives, or 20 seconds
   after the raid's last live wave is defeated if that is sooner. Both clocks only run while a player
   is in the area. At most two waves of a raid are alive at once; a wave that is due waits for one to
@@ -109,10 +111,10 @@ On a dedicated server raids come in waves instead of running for a fixed time:
   hours it ends anyway. Whatever is left of a raid that is over, timed out or lost to a restart stops
   hunting.
 - Several bases can be under attack at once, but one base only one raid at a time.
-- Hildir's three raids are fought around their boss instead: one wave with the boss and one group of
-  each of the rest, after which the rest keep coming as in vanilla, every 20 seconds (the strong one
-  every 100) up to vanilla's most alive at once, while a player is in the area. Once the boss is
-  down nothing more comes, and the raid ends when what is left is defeated.
+- Hildir's three raids are fought around their boss instead: one wave with the boss and as many of
+  each of the rest as vanilla allows alive at once. As those fall they are topped back up as in
+  vanilla, every 20 seconds (the strong one every 100), while a player is in the area. Once the boss
+  is down nothing more comes, and the raid ends when what is left is defeated.
 
 When and where raids happen is still vanilla's choice. The mod takes each raid over once vanilla has
 picked it. Comfort is worked out on the server as the best comfort within 30 m of the raid's start,

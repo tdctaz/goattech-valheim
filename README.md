@@ -82,8 +82,8 @@ dedicated server and on every client, all at the same version. Valheim Server To
   - Summoning: calls a wave from its own raid at every 18% of health lost, five waves in all
   - Splitting: drops nothing on death and splits into two full bosses without stars
   - Shielded: half damage from magic, a quarter off from arrows and bolts
-- Raids come in waves, one alive at a time, scaled by the players in the area and the base's
-  comfort, and end only when cleared
+- Raids come in waves of every raider at vanilla's most alive, two alive at a time, scaled by the
+  players in the area and the base's comfort, and end only when cleared
 - Creatures hit as hard however many players are near; vanilla adds 4% damage per player, and its
   extra health per player stays
 - Stars above two get their own size and tint

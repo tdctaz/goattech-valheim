@@ -187,7 +187,7 @@ namespace ValheimCreatures
                 "Less damage from bows and crossbows.");
             BossWaves = config.Bind("BossCyan", "Raids", DefaultBossWaves,
                 "Which raid each boss calls its waves from, as BossPrefab:RaidName pairs. A wave spawns one group " +
-                "of every creature in that raid, the way the raid itself spawns them.");
+                "of every creature in that raid, with the raid's group sizes.");
             BossWaveCount = config.Bind("BossCyan", "Waves", 5,
                 new ConfigDescription("How many waves a summoning boss calls over the fight.",
                     new AcceptableValueRange<int>(0, 10)));
@@ -218,9 +218,9 @@ namespace ValheimCreatures
                 "hildirboss1:Skeleton_Hildir_nochest, hildirboss2:Fenring_Cultist_Hildir_nochest, " +
                 "hildirboss3:GoblinBruteBros_nochest",
                 "Raids fought around a single boss, as RaidName:BossPrefab pairs. Such a raid is one wave: the boss " +
-                "once and one group of everything else. The rest keep coming as in vanilla, each at its own interval, " +
-                "chance and most alive, until the boss is down; then nothing more comes and the raid ends once what " +
-                "is left is defeated.");
+                "once and everything else at vanilla's most alive. The rest keep coming as in vanilla, each at its " +
+                "own interval, chance and most alive, until the boss is down; then nothing more comes and the raid " +
+                "ends once what is left is defeated.");
             RaidMaxActiveWaves = config.Bind("Raids", "MaxActiveWaves", 2,
                 new ConfigDescription(
                     "The most waves of one raid alive at once. A wave is defeated when every creature in it is dead, has " +
