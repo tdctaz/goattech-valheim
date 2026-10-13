@@ -133,6 +133,7 @@ namespace ServerAuthority
             PlayerLaunch.Register();
             BedSpawnPoint.Register();
             RemotePush.Register();
+            OwnershipHandback.Register();
 
             if (__instance.IsServer())
             {

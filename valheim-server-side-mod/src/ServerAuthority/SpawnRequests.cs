@@ -320,6 +320,82 @@ namespace ServerAuthority
             }
         }
 
+        private static Container NearestContainer(Anchor anchor)
+        {
+            Container best = null;
+            float bestDistance = 8f;
+            Container[] containers = UnityEngine.Object.FindObjectsByType<Container>(FindObjectsSortMode.None);
+            for (int i = 0; i < containers.Length; i++)
+            {
+                Container container = containers[i];
+                if (container.m_nview == null || !container.m_nview.IsValid())
+                {
+                    continue;
+                }
+
+                float distance = Vector3.Distance(container.transform.position, anchor.Position);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    best = container;
+                }
+            }
+
+            if (best == null)
+            {
+                Plugin.Log.LogWarning("Debug: no container within 8 m of the player.");
+            }
+
+            return best;
+        }
+
+        private static void Split(Anchor anchor, bool inUse)
+        {
+            Container container = NearestContainer(anchor);
+            if (container == null)
+            {
+                return;
+            }
+
+            ZDO zdo = container.m_nview.GetZDO();
+            if (zdo.GetOwner() != ZDOMan.GetSessionID())
+            {
+                Plugin.Log.LogWarning(
+                    $"Debug split: {Utils.GetPrefabName(container.gameObject)} {zdo.m_uid} is held by {zdo.GetOwner()}, " +
+                    "not the server. Close it and wait for the server to own it.");
+                return;
+            }
+
+            ZDOExtraData.Set(zdo.m_uid, ZDOVars.s_inUse, inUse ? 1 : 0);
+            zdo.SetOwnerInternal(anchor.Uid);
+            Plugin.Log.LogInfo(
+                $"Debug split: the server now has {Utils.GetPrefabName(container.gameObject)} {zdo.m_uid} as held by " +
+                $"{anchor.Uid}{(inUse ? " and in use" : "")}, without telling that client, which still has the server as owner.");
+        }
+
+        private static void AskBack(Anchor anchor)
+        {
+            Container container = NearestContainer(anchor);
+            if (container == null)
+            {
+                return;
+            }
+
+            ZDO zdo = container.m_nview.GetZDO();
+            long owner = zdo.GetOwner();
+            if (!SimulationAnchors.IsConnectedPeer(owner))
+            {
+                Plugin.Log.LogWarning(
+                    $"Debug askback: {Utils.GetPrefabName(container.gameObject)} {zdo.m_uid} is not held by a player.");
+                return;
+            }
+
+            OwnershipHandback.AskForTest(zdo, owner);
+            Plugin.Log.LogInfo(
+                $"Debug askback: asked {owner} to hand back {Utils.GetPrefabName(container.gameObject)} {zdo.m_uid}, " +
+                $"marked in use {zdo.GetInt(ZDOVars.s_inUse) != 0}.");
+        }
+
         private static void Weather(string env)
         {
             EnvMan envMan = EnvMan.instance;
@@ -541,6 +617,18 @@ namespace ServerAuthority
             if (string.Equals(name, "removeships", StringComparison.OrdinalIgnoreCase))
             {
                 RemoveShips();
+                return true;
+            }
+
+            if (string.Equals(name, "split", StringComparison.OrdinalIgnoreCase))
+            {
+                Split(anchor, parts.Length > 1 && string.Equals(parts[1], "inuse", StringComparison.OrdinalIgnoreCase));
+                return true;
+            }
+
+            if (string.Equals(name, "askback", StringComparison.OrdinalIgnoreCase))
+            {
+                AskBack(anchor);
                 return true;
             }
 

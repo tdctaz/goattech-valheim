@@ -270,7 +270,7 @@ once. Creatures already in the world keep their stars and color.
 | `Difficulty.DamagePerPlayer` | `0` | Extra creature damage per nearby player beyond the first. 0.04 is vanilla. |
 | `Looks.ScalePerStar` | `0.05` | Size added per star past two. |
 | `Looks.SaturationPerStar` | `0.1` | |
-| `Looks.ValuePerStar` | `-0.05` | Brightness; negative is darker. |
+| `Looks.ValuePerStar` | `-0.05` | Fraction of brightness per star past two; negative is darker. |
 | `Looks.FiveStarSaturation` | `0.25` | Extra for five stars only. |
 | `Looks.FiveStarValue` | `-0.3` | Extra for five stars only. |
 | `Debug.LogFactions` | `false` | Debug tools build only. Every creature's faction, each boss's key and trophy, and every raid's creatures, on world load. |

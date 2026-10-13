@@ -161,6 +161,11 @@ public static class ConfigFile
         Text("Schedule", "ShutdownAction", "The word for {action} when the server stays down.",
             c => c.ShutdownAction, (c, v) => c.ShutdownAction = v),
 
+        Flag("Update", "UpdateOnStart",
+            "Update the server with SteamCMD when the tool starts, before the server does, so it never starts " +
+            "on a version the players have already left behind. If SteamCMD is missing or fails, the server " +
+            "starts on the version it has.",
+            c => c.UpdateOnStart, (c, v) => c.UpdateOnStart = v),
         Flag("Update", "UpdateOnDailyRestart",
             "Update the server with SteamCMD during the daily restart, while it is down. Players' games update " +
             "themselves through Steam, and a server left on an older version turns them away. If SteamCMD is " +

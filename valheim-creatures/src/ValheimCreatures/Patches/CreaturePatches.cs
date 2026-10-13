@@ -393,7 +393,26 @@ namespace ValheimCreatures.Patches
 
         private static void Postfix(LevelEffects __instance, int level)
         {
+            Looks.ApplyTint(__instance, level);
             Looks.KeepVanillaSizeIndoors(__instance, level);
+        }
+    }
+
+    [HarmonyPatch(typeof(Ragdoll), nameof(Ragdoll.Awake))]
+    internal static class Ragdoll_Awake_Patch
+    {
+        private static void Postfix(Ragdoll __instance)
+        {
+            Looks.TintRagdoll(__instance);
+        }
+    }
+
+    [HarmonyPatch(typeof(Ragdoll), nameof(Ragdoll.Setup))]
+    internal static class Ragdoll_Setup_Patch
+    {
+        private static void Postfix(Ragdoll __instance)
+        {
+            Looks.TintRagdoll(__instance);
         }
     }
 

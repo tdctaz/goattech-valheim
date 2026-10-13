@@ -90,7 +90,15 @@ public sealed class Supervisor
         ScheduleNextDaily(DateTime.Now);
         Log.Info(_nextDaily.HasValue ? $"Daily restart at {_nextDaily:HH:mm}, next {_nextDaily:yyyy-MM-dd HH:mm}." : "Daily restart is off.");
         Log.Info("Type 'help' for commands.");
-        StartServer();
+        if (_config.UpdateOnStart)
+        {
+            _stopKind = StopKind.Restart;
+            BeginUpdate();
+        }
+        else
+        {
+            StartServer();
+        }
 
         while (!_exit)
         {

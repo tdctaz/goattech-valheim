@@ -93,6 +93,12 @@ namespace ServerAuthority
                     Plugin.Log.LogInfo(network);
                 }
 
+                string handbacks = OwnershipHandback.ClosePeriod(reportLength);
+                if (handbacks != null)
+                {
+                    Plugin.Log.LogInfo(handbacks);
+                }
+
                 ResetReport(now);
             }
         }

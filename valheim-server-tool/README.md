@@ -4,6 +4,7 @@ Runs the Valheim dedicated server on Windows and Linux and looks after it:
 
 - Starts, stops and restarts the server, from its own window or another terminal
 - Detects crashes, keeps the logs and configs from each one, and restarts the server
+- Updates Valheim with SteamCMD when it starts, before the server does
 - Restarts once a day (05:00 by default), backs up the world and updates Valheim with SteamCMD
   while the server is down
 - Warns every player 15, 10, 5, 2 and 1 minutes before the server stops
@@ -27,8 +28,8 @@ on Linux), which Valheim also treats as save and quit.
 2. Run `ValheimServerTool run`. The first run writes `servertool.cfg` next to the tool and stops.
 3. Set at least `Name`, `World` and `Password` under `[Server]`. Every setting is described in the
    file, with its default and the values it accepts.
-4. Run `ValheimServerTool run` again. It checks the file, starts the server and keeps it running
-   until you `quit`. Leave that window open.
+4. Run `ValheimServerTool run` again. It checks the file, updates the server with SteamCMD, starts
+   it and keeps it running until you `quit`. Leave that window open.
 
 A mistake in the file stops the tool before anything starts, naming the line. The tool rewrites the
 file at startup, keeping your values and refreshing the notes, so new settings appear by themselves
@@ -64,7 +65,7 @@ Closing the window can take the server down without saving, so use `quit`.
 | `[Server]` | Everything `valheim_server` accepts: name, world, password, port, public, crossplay, instance id, save interval, Valheim's own backups, save folder, extra arguments. |
 | `[World Modifiers]` | The world creation difficulty settings: preset, combat, death penalty, resources, raids, portals, and the no build cost, player based raids, passive enemies, no map and fire hazard checkboxes. |
 | `[Schedule]` | Daily restart time, warning times and the text of every message. |
-| `[Update]` | Whether the daily restart updates, where SteamCMD is, validation and a timeout. |
+| `[Update]` | Whether the tool updates when it starts and at the daily restart, where SteamCMD is, validation and a timeout. |
 | `[Crashes]` | Automatic restart after a crash, and the delay. |
 | `[Backups]` | Where backups, logs and crash reports go, and how many are kept. |
 | `[Tool]` | The server folder if it is not found by itself, timeouts and environment. |
@@ -109,7 +110,9 @@ the server is not running when the countdown would begin, or another stop is alr
 day's restart is skipped. A countdown that starts late first tells players the time actually left.
 
 Players' games update through Steam, and Server Authority refuses a client whose game version differs
-from the server's, so the server has to follow a Valheim patch. The update runs:
+from the server's, so the server has to follow a Valheim patch. The tool updates when it starts,
+before the server does, and at every daily restart; `update` does it in between. Set
+`UpdateOnStart = false` under `[Update]` to start the server straight away. The update runs:
 
 ```
 steamcmd +force_install_dir <server folder> +login anonymous +app_update 896660 +quit

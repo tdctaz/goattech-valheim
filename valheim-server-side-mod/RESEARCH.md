@@ -191,9 +191,10 @@ Transition behavior:
 Caveat: clients still call `ZNetView.ClaimOwnership()` for some interactions and this
 cannot be prevented without a client mod. Most such claims are conditional (e.g.
 `Fireplace.Interact` only claims when the object has no owner, so server ownership blocks
-it) or replaced by RPCs to the owner (containers, doors). Any stray claim is reclaimed by
-the next release tick within 2 seconds; the policy loop must tolerate this rather than
-assert ownership invariants.
+it) or replaced by RPCs to the owner (containers, doors). Any stray claim is asked back by
+the next release tick, and the client hands it back; the policy loop must tolerate this rather
+than assert ownership invariants. Taking it back without asking can cross a write from the
+client, and `ZDOMan.RPC_ZDOData` then leaves each side holding the other as owner.
 
 ## 4b. Two concrete causes of the old mod's memory growth
 

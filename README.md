@@ -48,6 +48,8 @@ dedicated server and on every client, all at the same version. Valheim Server To
   only admins can run cheat commands on the server, which runs and logs them
 - Fixed: boats could lose buoyancy, sink and break apart, in open sea or when moored across the
   border of a zone that had not loaded yet
+- Fixed: a chest could refuse everyone, with no message, until the player who last opened it
+  logged out and back in
 
 ### Rebalanced
 
@@ -100,6 +102,7 @@ Runs the dedicated server on Windows and Linux. Needs the .NET 10 runtime.
 
 - Start, stop and restart the server from its window or another terminal
 - Restarts the server after a crash and keeps the logs and configs from each one
+- Updates Valheim with SteamCMD when it starts, before the server does
 - Restarts daily at 05:00, backs up the world and updates Valheim with SteamCMD while it is down
 - Warns every player on screen 15, 10, 5, 2 and 1 minutes before a stop, through Server Authority
 

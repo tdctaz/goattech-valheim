@@ -39,6 +39,7 @@ public sealed class ToolConfig
     public string RestartAction { get; set; } = "restarting";
     public string ShutdownAction { get; set; } = "shutting down";
 
+    public bool UpdateOnStart { get; set; } = true;
     public bool UpdateOnDailyRestart { get; set; } = true;
     public string SteamCmdPath { get; set; } = "";
     public bool ValidateOnUpdate { get; set; }

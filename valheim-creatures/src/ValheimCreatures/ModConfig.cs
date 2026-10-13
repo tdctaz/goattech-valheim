@@ -298,8 +298,8 @@ namespace ValheimCreatures
                     new AcceptableValueRange<float>(-1f, 1f)));
             ValuePerStar = config.Bind("Looks", "ValuePerStar", -0.05f,
                 new ConfigDescription(
-                    "Local. Each star above two shifts brightness by this much from the two star tint. Negative " +
-                    "is darker.",
+                    "Local. Each star above two scales brightness by this fraction of the two star tint, so -0.05 " +
+                    "is 5% darker per star. Negative is darker.",
                     new AcceptableValueRange<float>(-1f, 1f)));
 
             TopSaturation = config.Bind("Looks", "FiveStarSaturation", 0.25f,
@@ -308,7 +308,8 @@ namespace ValheimCreatures
                     "stands apart even where its hue lands near the three star one.",
                     new AcceptableValueRange<float>(-1f, 1f)));
             TopValue = config.Bind("Looks", "FiveStarValue", -0.3f,
-                new ConfigDescription("Local. Extra brightness for five stars only. Negative is darker.",
+                new ConfigDescription("Local. Extra brightness for five stars only, as a fraction like ValuePerStar. " +
+                                      "Negative is darker.",
                     new AcceptableValueRange<float>(-1f, 1f)));
 
 #if DEBUG_TOOLS

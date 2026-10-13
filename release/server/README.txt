@@ -31,10 +31,10 @@ server-files/ holds everything that goes into the server folder:
   ServerAuthority-watchdog.*           a simpler launcher, if you would
                                        rather not use the tool
 
-The server tool starts the server, restarts it after a crash and keeps the
-logs, restarts it daily at 05:00 with a world backup and a Valheim update
-through SteamCMD, and warns every player on screen 15, 10, 5, 2 and 1
-minutes before any stop. It needs the .NET 10 runtime ("Runtime" for x64 on
+The server tool updates Valheim through SteamCMD and starts the server,
+restarts it after a crash and keeps the logs, restarts it daily at 05:00
+with a world backup and another update, and warns every player on screen
+15, 10, 5, 2 and 1 minutes before any stop. It needs the .NET 10 runtime ("Runtime" for x64 on
 Windows, dotnet-runtime-10.0 on Linux):
 
     https://dotnet.microsoft.com/download/dotnet/10.0
@@ -119,8 +119,10 @@ Everything the tool keeps goes into servertool/backups:
     worlds/<world>-<time>.zip       the world and the characters
 
 Players' games update themselves through Steam, and the server refuses
-anyone whose Valheim version differs from its own. The daily update keeps
-the server in step; after a Valheim patch during the day, type update.
+anyone whose Valheim version differs from its own. The updates when the
+tool starts and at the daily restart keep the server in step; after a
+Valheim patch during the day, type update. To start without updating, set
+UpdateOnStart = false under [Update].
 SteamCMD only replaces the game's own files, so BepInEx, the mods,
 servertool and the worlds are left alone.
 

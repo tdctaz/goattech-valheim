@@ -39,7 +39,7 @@ server. The GoatTech release turns on mod validation, so a client without it is 
 - **Anything a player is using.** The policy never takes a ZDO whose `InUse` flag is set while its
   owner is connected, and leaves anything a connected client has just claimed alone for 3 seconds,
   covering the gap before the flag arrives. Otherwise a chest snaps shut about a second after it
-  is opened.
+  is opened. See [Handing objects back](#handing-objects-back) for how the server gets it back.
 
 Ship cargo and cart inventories share their vehicle's ZDO, so opening one hands the whole boat or
 cart to that client until the panel closes. Splitting the two would mean patching
@@ -59,8 +59,42 @@ server simulation of a ship misbehaves, not a tuning knob.
   rate from 30 to 60 took one player at simulation distance 2 from 36% to 73% of a core.
 - **The server sends more.** See [Object updates](#object-updates) for the upload it needs.
 - **Clients can still grab an object** when they interact with it, since
-  `ZNetView.ClaimOwnership` is client side. The policy takes it back after the 3 second grace, on
-  its next two second pass.
+  `ZNetView.ClaimOwnership` is client side. The policy asks for it back after the 3 second grace,
+  on its next two second pass.
+
+### Handing objects back
+
+When the server wants an object back from a connected player, it asks their client to hand it back
+rather than taking it, and the client does so unless one of its containers is open there. Only the
+holder of a chest decides who else may open it, so a player using a chest keeps it and everyone else
+who asks is told it is in use. As in vanilla, a request that arrives while the chest is changing
+hands is dropped without a message, and works when repeated.
+
+Taking it directly broke chests. A player who reopened a chest they still held, at the moment the
+server took it back, wrote "in use" while the takeback was in flight. `ZDOMan.RPC_ZDOData` lets
+newer data overwrite a newer owner but applies only the owner from older data, so the server ended
+up with the player as owner and the player with the server. Every open request then went to a
+machine that answered "but im not the owner", and the chest refused everyone, with no message,
+until that player relogged. Live servers logged this at least eight times in two weeks, each after
+a burst of sorting.
+
+- A client that has not answered within 10 seconds loses the object anyway, with a warning.
+- Every 6 seconds the server asks the holder of each object marked in use whether it really holds
+  it. A client that does not tells the server, which takes the object and clears the mark, so a
+  split that forms some other way repairs itself. Each repair is logged as a warning. A client
+  that names another connected player as the owner is left alone, since that is a handover still
+  in flight.
+- A client clears the in-use mark on a container it no longer owns within a second, which vanilla
+  only does on the owner; a stale mark stops the container loading its contents. An owner closes a
+  container still marked in use that the inventory no longer shows, which vanilla leaves refusing
+  everyone when the inventory switches straight from one chest to another. An owner whose open
+  container lost its mark writes it again.
+- When the server takes an object from a player who has left, it clears an in-use mark they left.
+- Transfers that do not go to the server stay direct: a lease handing a mount, cart or steered ship
+  to its user, an unmanned hull given to the nearest player with `ServerOwnsWaterborne` off, and
+  releasing to nobody an object that is in no player's active area.
+- The performance report adds a line such as `Handbacks over 600s: 41 asked, 41 handed back, 0
+  taken after 10 s without an answer, 0 ownership split(s) repaired.`
 
 ## Installing
 
@@ -360,6 +394,8 @@ where `devcommands` cannot run from a client.
 | `weather [env\|clear]` | Forces or releases the server's environment, or lists them. |
 | `event <name>`, `event stop` | Starts or stops a random event at the player without flagging anyone as a cheater. |
 | `removeships` | Destroys every instantiated ship. |
+| `split [inuse]` | Makes the server hold the nearest server-owned container as the player's, optionally in use, without telling their client: the state that locked chests. |
+| `askback` | Asks the player's client to hand back the nearest container they hold, whatever its state. If it is open there, the client must keep it. |
 
 ### After a game update
 
@@ -370,7 +406,8 @@ dotnet run --project tools/PatchCheck -c Release -- \
 ```
 
 `PatchCheck` resolves every `[HarmonyPatch]` target. Then re-read the vanilla methods the mod copies
-or replaces against a fresh decompilation: `ZDOMan.ReleaseZDOS`, `ZoneSystem.Update` and
+or replaces against a fresh decompilation: the merge in `ZDOMan.RPC_ZDOData` and `Container.SetInUse`,
+`CheckForChanges` and `RPC_RequestOpen`, which [handing objects back](#handing-objects-back) relies on, `ZDOMan.ReleaseZDOS`, `ZoneSystem.Update` and
 `IsActiveAreaLoaded`, `ZNetScene.CreateDestroyObjects` and `OutsideActiveArea`,
 `SpawnSystem.UpdateSpawning`, `RandEventSystem.FixedUpdate`, `Player.Save` (player data version),
 `EnvMan.UpdateEnvironment` and `GetBiome`,

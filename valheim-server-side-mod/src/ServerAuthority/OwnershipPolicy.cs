@@ -28,6 +28,7 @@ namespace ServerAuthority
             PeerClaims.Clear();
             StaleClaims.Clear();
             OwnershipLeases.Clear();
+            OwnershipHandback.Reset();
             HookedFish.Reset();
 #if DEBUG_TOOLS
             NearestWater.Reset();
@@ -78,6 +79,7 @@ namespace ServerAuthority
 
                 if (IsBeingUsedByAPlayer(zdo))
                 {
+                    OwnershipHandback.WhileInUse(zdo);
                     continue;
                 }
 
@@ -127,6 +129,12 @@ namespace ServerAuthority
                     continue;
                 }
 
+                if (target == server && SimulationAnchors.IsConnectedPeer(current) &&
+                    !OwnershipHandback.TakeNow(zdo, current))
+                {
+                    continue;
+                }
+
 #if DEBUG_TOOLS
                 if (ModConfig.LogOwnershipChanges.Value)
                 {
@@ -137,10 +145,16 @@ namespace ServerAuthority
 #endif
 
                 zdo.SetOwner(target);
+                if (target == server)
+                {
+                    OwnershipHandback.ClearStaleInUse(zdo, current);
+                }
+
                 transfers++;
             }
 
             PruneClaims();
+            OwnershipHandback.Prune();
             OwnershipLeases.PruneExpired();
             ReportStatus(anchors.Count, simulated, transfers);
         }
@@ -162,6 +176,12 @@ namespace ServerAuthority
             }
 
             if (!SimulationAnchors.IsConnectedPeer(current))
+            {
+                PeerClaims.Remove(zdo.m_uid);
+                return true;
+            }
+
+            if (OwnershipHandback.IsAwaiting(zdo, current))
             {
                 PeerClaims.Remove(zdo.m_uid);
                 return true;
