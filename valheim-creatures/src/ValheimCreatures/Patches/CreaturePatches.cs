@@ -140,6 +140,26 @@ namespace ValheimCreatures.Patches
         }
     }
 
+    [HarmonyPatch(typeof(BaseAI), nameof(BaseAI.FindEnemy))]
+    internal static class BaseAI_FindEnemy_Patch
+    {
+        [HarmonyPriority(Priority.First)]
+        private static void Prefix()
+        {
+            Raiders.BeginTargeting();
+        }
+
+        private static void Postfix(BaseAI __instance, ref Character __result)
+        {
+            __result = Raiders.Prefer(__instance, __result);
+        }
+
+        private static void Finalizer()
+        {
+            Raiders.EndTargeting();
+        }
+    }
+
     [HarmonyPatch(typeof(BaseAI), nameof(BaseAI.IsEnemy), typeof(Character), typeof(Character))]
     internal static class BaseAI_IsEnemy_Patch
     {

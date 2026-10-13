@@ -84,7 +84,7 @@ dedicated server and on every client, all at the same version. Valheim Server To
   - Shielded: half damage from magic, a quarter off from arrows and bolts
 - Raids come in waves of every raider at vanilla's most alive, two alive at a time, scaled by the
   players in the area and the base's comfort, and end only when cleared
-  - Raiders and wild creatures ignore each other, so raiders go for the base, not the deer
+  - Raiders ignore deer, hares and other creatures that only flee, and put players before monsters
   - Raiders head for the base and come back when they stray
   - Players are told as each wave falls how much of the raid is still to come
   - Hildir's raids are fought around their boss, who comes once; the rest keep coming at vanilla's

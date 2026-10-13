@@ -52,6 +52,7 @@ namespace ValheimCreatures
         internal float RaidReturnDistance;
         internal float RaidReturnSeconds;
         internal int RaidReturnTries;
+        internal float RaidPlayerPriority;
         internal float DamagePerPlayer = 0.04f;
 
         internal static readonly Balance Vanilla = new Balance();
@@ -104,6 +105,7 @@ namespace ValheimCreatures
                 RaidReturnDistance = ModConfig.RaidReturnDistance.Value,
                 RaidReturnSeconds = ModConfig.RaidReturnSeconds.Value,
                 RaidReturnTries = ModConfig.RaidReturnTries.Value,
+                RaidPlayerPriority = ModConfig.RaidPlayerPriority.Value,
                 DamagePerPlayer = ModConfig.DamagePerPlayer.Value,
             };
 
@@ -169,6 +171,7 @@ namespace ValheimCreatures
             package.Write(RaidReturnSeconds);
             package.Write(RaidReturnTries);
             package.Write(DamagePerPlayer);
+            package.Write(RaidPlayerPriority);
         }
 
         internal static Balance Read(ZPackage package)
@@ -228,6 +231,7 @@ namespace ValheimCreatures
             balance.RaidReturnSeconds = package.ReadSingle();
             balance.RaidReturnTries = package.ReadInt();
             balance.DamagePerPlayer = package.ReadSingle();
+            balance.RaidPlayerPriority = package.ReadSingle();
             return balance;
         }
 

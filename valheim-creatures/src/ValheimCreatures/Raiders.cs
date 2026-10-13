@@ -12,11 +12,13 @@ namespace ValheimCreatures
         private const float CalmSeconds = 90f;
         private const float EngageRange = 30f;
         private const float TargetRange = 60f;
+        private const float HuntRange = 200f;
 
         private static readonly int CenterKey = "ValheimCreatures_RaidCenter".GetStableHashCode();
         private static readonly int BossKey = "ValheimCreatures_RaidBoss".GetStableHashCode();
         private static readonly Dictionary<Character, Raider> Known = new Dictionary<Character, Raider>();
         private static readonly List<Character> Scratch = new List<Character>();
+        private static bool _targeting;
 
         private sealed class Raider
         {
@@ -26,12 +28,14 @@ namespace ValheimCreatures
             internal float LastReturn;
             internal int Returns;
             internal bool Boss;
+            internal Character LastMonster;
         }
 
         internal static void Reset()
         {
             Known.Clear();
             Scratch.Clear();
+            _targeting = false;
         }
 
         internal static void Register(Character character)
@@ -133,32 +137,88 @@ namespace ValheimCreatures
             return zdo.GetVec3(CenterKey, out _);
         }
 
-        internal static bool Ignores(Character a, Character b)
+        internal static void BeginTargeting()
         {
-            if (Known.Count == 0)
-            {
-                return false;
-            }
-
-            bool raiderA = Known.ContainsKey(a) && !a.IsTamed();
-            bool raiderB = Known.ContainsKey(b) && !b.IsTamed();
-            if (raiderA == raiderB)
-            {
-                return raiderA;
-            }
-
-            return Wild(raiderA ? b : a);
+            _targeting = true;
         }
 
-        private static bool Wild(Character character)
+        internal static void EndTargeting()
         {
-            if (character.IsPlayer() || character.IsTamed())
+            _targeting = false;
+        }
+
+        internal static bool Ignores(Character seeker, Character other)
+        {
+            if (!_targeting || Known.Count == 0 || !IsRaider(seeker))
             {
                 return false;
             }
 
-            Character.Faction faction = character.GetFaction();
-            return faction != Character.Faction.PlayerSpawned && faction != Character.Faction.TrainingDummy;
+            return IsRaider(other) || Neutral(other);
+        }
+
+        private static bool IsRaider(Character character)
+        {
+            return Known.ContainsKey(character) && !character.IsTamed();
+        }
+
+        private static bool Neutral(Character character)
+        {
+            return !character.IsTamed() && character.GetBaseAI() is AnimalAI;
+        }
+
+        internal static Character Prefer(BaseAI ai, Character found)
+        {
+            Character seeker = ai.m_character;
+            if (found == null || found.IsPlayer() || Known.Count == 0 || seeker == null || seeker.IsTamed() ||
+                !Known.TryGetValue(seeker, out Raider raider))
+            {
+                return found;
+            }
+
+            float priority = ConfigSync.Current.RaidPlayerPriority;
+            Vector3 position = ai.transform.position;
+            float distance = Vector3.Distance(found.transform.position, position);
+            Player player = ClosestPlayer(position, out float playerDistance);
+            if (player != null && priority > 0f && playerDistance < distance * priority)
+            {
+                return player;
+            }
+
+            if (raider.LastMonster != found)
+            {
+                raider.LastMonster = found;
+                string rather = player != null
+                    ? $"rather than {player.GetPlayerName()} {playerDistance:0} m away"
+                    : $"with no player within {HuntRange:0} m";
+                Plugin.Log.LogInfo(
+                    $"Raider {Name(seeker)} goes for {Name(found)}, {distance:0} m away, {rather}.");
+            }
+
+            return found;
+        }
+
+        private static Player ClosestPlayer(Vector3 position, out float distance)
+        {
+            Player closest = null;
+            distance = HuntRange;
+            foreach (Player player in Player.GetAllPlayers())
+            {
+                if (player == null || player.IsDead() || player.m_aiSkipTarget || player.IsDebugFlying() ||
+                    player.InGhostMode())
+                {
+                    continue;
+                }
+
+                float playerDistance = Vector3.Distance(player.transform.position, position);
+                if (playerDistance < distance)
+                {
+                    closest = player;
+                    distance = playerDistance;
+                }
+            }
+
+            return closest;
         }
 
         internal static bool Returning(MonsterAI ai)
