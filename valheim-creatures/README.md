@@ -115,6 +115,11 @@ On a dedicated server raids come in waves instead of running for a fixed time:
   hours it ends anyway. Whatever is left of a raid that is over, timed out or lost to a restart stops
   hunting.
 - Several bases can be under attack at once, but one base only one raid at a time.
+- Vanilla's raid clock restarts whenever a raid ends, so the next roll for a raid comes one full
+  interval after the raid is over rather than after it began. Vanilla rolls every 46 minutes with a
+  20% chance; the world's Raids setting scales both, so on Hard it is every 27.6 minutes at 33%.
+  Vanilla raids last a minute or two, so counting from the start was close enough there; waves can
+  take a quarter of an hour.
 - Hildir's three raids are fought around their boss instead: one wave with the boss and as many of
   each of the rest as vanilla allows alive at once. As those fall they are topped back up as in
   vanilla, every 20 seconds (the strong one every 100), while a player is in the area. Once the boss

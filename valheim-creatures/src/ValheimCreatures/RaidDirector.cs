@@ -344,6 +344,7 @@ namespace ValheimCreatures
                     Active.Remove(raid);
                 }
 
+                RestartClock();
                 Send();
             }
 
@@ -355,6 +356,24 @@ namespace ValheimCreatures
             }
 
             SweepRaiders(dt);
+        }
+
+        private static void RestartClock()
+        {
+            RandEventSystem events = RandEventSystem.instance;
+            if (events == null)
+            {
+                return;
+            }
+
+            events.m_eventTimer = 0f;
+            if (Game.m_eventRate > 0f)
+            {
+                Plugin.Log.LogInfo(
+                    $"The raid clock restarts at the raid's end: the next roll for a raid is in " +
+                    $"{events.m_eventIntervalMin * Game.m_eventRate:0.#} minutes, with a " +
+                    $"{Mathf.Min(100f, events.m_eventChance / Game.m_eventRate):0}% chance.");
+            }
         }
 
         private static void SweepRaiders(float dt)
