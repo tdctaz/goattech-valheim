@@ -371,8 +371,7 @@ namespace ValheimCreatures
             {
                 Plugin.Log.LogInfo(
                     $"The raid clock restarts at the raid's end: the next roll for a raid is in " +
-                    $"{events.m_eventIntervalMin * Game.m_eventRate:0.#} minutes, with a " +
-                    $"{Mathf.Min(100f, events.m_eventChance / Game.m_eventRate):0}% chance.");
+                    $"{RaidRolls.Minutes(events):0.#} minutes, with a {RaidRolls.Chance(events):0.#}% chance.");
             }
         }
 

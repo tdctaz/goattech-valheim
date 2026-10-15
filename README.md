@@ -87,6 +87,7 @@ dedicated server and on every client, all at the same version. Valheim Server To
 - Raids come in waves of every raider at vanilla's most alive, two alive at a time, scaled by the
   players in the area and the base's comfort, and end only when cleared
   - The vanilla raid clock restarts when a raid ends, so a base gets a full interval of peace
+  - The server logs every raid roll, and who was in a base when one came up
   - Raiders ignore deer, hares and other creatures that only flee, and put players before monsters
   - Raiders head for the base and come back when they stray
   - Players are told as each wave falls how much of the raid is still to come

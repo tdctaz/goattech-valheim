@@ -125,6 +125,12 @@ On a dedicated server raids come in waves instead of running for a fixed time:
   20% chance; the world's Raids setting scales both, so on Hard it is every 27.6 minutes at 33%.
   Vanilla raids last a minute or two, so counting from the start was close enough there; waves can
   take a quarter of an hour.
+- The server logs every roll vanilla makes for a raid: the number rolled against the chance, each
+  connected player's position, biome and base value, and when the next roll is due. When the roll
+  comes up it also names the raids the world's keys allow, which of them each player could get or
+  why none, and the raids that were possible. A raid that comes only to bases counts a player with
+  base value 3 or more, which vanilla works out on the player's own machine from the base pieces
+  within 20 m.
 - Hildir's three raids are fought around their boss instead: one wave with the boss and as many of
   each of the rest as vanilla allows alive at once. As those fall they are topped back up as in
   vanilla, every 20 seconds (the strong one every 100), while a player is in the area. Once the boss
@@ -352,6 +358,7 @@ src/ValheimCreatures/
   BossWaves.cs           Cyan bosses calling raid waves
   WaveSpawner.cs         One wave of a raid, shared by raids and summoning bosses
   RaidDirector.cs        Raids as waves, several bases at once
+  RaidRolls.cs           Logs vanilla's rolls for a raid and why one did or did not start
   Raiders.cs             Raid creatures: choosing targets, heading back, leaving the raid
   RaidMessages.cs        What players are told as a raid's waves are defeated
   RaidWeather.cs         The running raids, for Server Authority's weather

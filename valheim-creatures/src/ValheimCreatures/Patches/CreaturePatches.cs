@@ -211,6 +211,29 @@ namespace ValheimCreatures.Patches
         }
     }
 
+    [HarmonyPatch(typeof(RandEventSystem), nameof(RandEventSystem.UpdateRandomEvent))]
+    internal static class RandEventSystem_UpdateRandomEvent_Patch
+    {
+        private static void Prefix(RandEventSystem __instance, float dt)
+        {
+            RaidRolls.Before(__instance, dt);
+        }
+
+        private static void Postfix(RandEventSystem __instance)
+        {
+            RaidRolls.After(__instance);
+        }
+    }
+
+    [HarmonyPatch(typeof(RandEventSystem), nameof(RandEventSystem.GetPossibleRandomEvents))]
+    internal static class RandEventSystem_GetPossibleRandomEvents_Patch
+    {
+        private static void Postfix(RandEventSystem __instance, List<KeyValuePair<RandomEvent, Vector3>> __result)
+        {
+            RaidRolls.Searched(__instance, __result);
+        }
+    }
+
     [HarmonyPatch(typeof(RandEventSystem), nameof(RandEventSystem.SendCurrentRandomEvent))]
     internal static class RandEventSystem_SendCurrentRandomEvent_Patch
     {
