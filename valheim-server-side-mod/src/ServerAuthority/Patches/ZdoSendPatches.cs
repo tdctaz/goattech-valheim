@@ -141,7 +141,7 @@ namespace ServerAuthority.Patches
             man.CreateSyncList(peer, toSync);
             if (toSync.Count == 0 && peer.m_invalidSector.Count == 0)
             {
-                NetworkStats.RecordTurn(peer.m_peer, window, 0, 0, 0, Stopwatch.GetTimestamp() - started);
+                NetworkStats.RecordTurn(peer.m_peer, window, 0, 0, 0, 0, 0, Stopwatch.GetTimestamp() - started);
                 return false;
             }
 
@@ -168,6 +168,8 @@ namespace ServerAuthority.Patches
             bool isServer = ZNet.instance.IsServer();
             int size = package.Size();
             int sent = 0;
+            int fresh = 0;
+            int ownerOnly = 0;
             int index = 0;
             for (; index < toSync.Count; index++)
             {
@@ -177,6 +179,15 @@ namespace ServerAuthority.Patches
                 }
 
                 ZDO zdo = toSync[index];
+                if (!peer.m_zdos.TryGetValue(zdo.m_uid, out ZDOMan.ZDOPeer.PeerZDOInfo known))
+                {
+                    fresh++;
+                }
+                else if (known.m_dataRevision == zdo.DataRevision)
+                {
+                    ownerOnly++;
+                }
+
                 peer.m_forceSend.Remove(zdo.m_uid);
                 if (!isServer)
                 {
@@ -212,8 +223,8 @@ namespace ServerAuthority.Patches
                 peer.m_peer.m_rpc.Invoke("ZDOData", package);
             }
 
-            NetworkStats.RecordTurn(peer.m_peer, window, sent, flushed ? package.Size() : 0, toSync.Count - index,
-                Stopwatch.GetTimestamp() - started);
+            NetworkStats.RecordTurn(peer.m_peer, window, sent, fresh, ownerOnly, flushed ? package.Size() : 0,
+                toSync.Count - index, Stopwatch.GetTimestamp() - started);
             return flushed;
         }
     }

@@ -22,6 +22,8 @@ namespace ServerAuthority
             internal int Clipped;
             internal int Behind;
             internal long Objects;
+            internal long Fresh;
+            internal long OwnerOnly;
             internal long Bytes;
             internal int BacklogMax;
             internal int WindowMax;
@@ -44,6 +46,8 @@ namespace ServerAuthority
                 Clipped = 0;
                 Behind = 0;
                 Objects = 0;
+                Fresh = 0;
+                OwnerOnly = 0;
                 Bytes = 0;
                 BacklogMax = 0;
                 WindowMax = 0;
@@ -112,11 +116,12 @@ namespace ServerAuthority
             peer.Period.QueueFull++;
         }
 
-        internal static void RecordTurn(ZNetPeer netPeer, int window, int objects, int bytes, int backlog, long ticks)
+        internal static void RecordTurn(ZNetPeer netPeer, int window, int objects, int fresh, int ownerOnly, int bytes,
+            int backlog, long ticks)
         {
             Peer peer = Get(netPeer);
-            Turn(peer.Window, window, objects, bytes, backlog, ticks);
-            Turn(peer.Period, window, objects, bytes, backlog, ticks);
+            Turn(peer.Window, window, objects, fresh, ownerOnly, bytes, backlog, ticks);
+            Turn(peer.Period, window, objects, fresh, ownerOnly, bytes, backlog, ticks);
             _windowSendTicks += ticks;
         }
 
@@ -288,7 +293,8 @@ namespace ServerAuthority
             c.WindowMax = Math.Max(c.WindowMax, window);
         }
 
-        private static void Turn(Counters c, int window, int objects, int bytes, int backlog, long ticks)
+        private static void Turn(Counters c, int window, int objects, int fresh, int ownerOnly, int bytes, int backlog,
+            long ticks)
         {
             Count(c, window);
             if (objects > 0 || bytes > 0)
@@ -307,6 +313,8 @@ namespace ServerAuthority
             }
 
             c.Objects += objects;
+            c.Fresh += fresh;
+            c.OwnerOnly += ownerOnly;
             c.Bytes += bytes;
             c.BacklogMax = Math.Max(c.BacklogMax, backlog);
             c.SendTicks += ticks;
@@ -349,7 +357,8 @@ namespace ServerAuthority
             StringBuilder text = new StringBuilder();
             text.Append(peer.Name).Append(": ");
             text.Append($"{c.Turns / seconds:F1} sends/s ({c.Flushes / seconds:F1} with data), ");
-            text.Append($"{c.Objects / seconds:F0} objects/s, {c.Bytes / 1024f / seconds:F1} KiB/s, ");
+            text.Append($"{c.Objects / seconds:F0} objects/s ({Share(c.Fresh, c.Objects)} new, ");
+            text.Append($"{Share(c.OwnerOnly, c.Objects)} only a new owner), {c.Bytes / 1024f / seconds:F1} KiB/s, ");
             text.Append($"window up to {c.WindowMax / 1024f:F0} KiB; ");
             text.Append($"{Percent(c.Clipped, c.Flushes)} of sends full, ");
             text.Append($"{Percent(c.Behind, c.Flushes)} fell behind, ");
@@ -378,6 +387,11 @@ namespace ServerAuthority
 
             text.Append('.');
             return text.ToString();
+        }
+
+        private static string Share(long part, long whole)
+        {
+            return whole > 0 ? $"{part * 100 / whole}%" : "0%";
         }
 
         private static string Percent(int part, int whole)

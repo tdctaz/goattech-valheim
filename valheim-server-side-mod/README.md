@@ -313,7 +313,8 @@ vanilla then creates it in its usual turn.
 ### Reading the network report
 
 ```
-Test Maiden: 19.7 sends/s (19.3 with data), 1205 objects/s, 262.5 KiB/s, window up to 38 KiB;
+Test Maiden: 19.7 sends/s (19.3 with data), 1205 objects/s (12% new, 3% only a new owner),
+262.5 KiB/s, window up to 38 KiB;
 51% of sends full, 3% fell behind, 2% held back by a full queue, backlog up to 107 object(s);
 ping 42 ms (worst 95), delivery 100.0%, Steam queue up to 48 ms, Steam rate 384 KiB/s,
 Steam out 245.3 KiB/s; send work 0.53 ms per send (worst 3.5 ms).
@@ -326,6 +327,9 @@ Most sent: 43% Deer, 34% Wolf, 6% Neck, ...
   still full.
 - **Steam queue** staying near 100 ms or more while the player falls behind means the Steam rate is
   the limit.
+- **new** is the share of objects the player had never received, and **only a new owner** the
+  share sent again just because their owner changed. A large owner-only share while a player falls
+  behind means ownership churn rather than new areas loading.
 - **send work** is server CPU spent packing updates; it grows with base size and send rate.
 - **Most sent** is the share of bytes by prefab.
 

@@ -123,7 +123,8 @@ PerformanceReportSeconds, NetworkSaturationWarning
     Every report interval the log gets the server's frame rate and then one
     line per player about object updates, for example:
 
-      Test Maiden: 19.7 sends/s (19.3 with data), 1205 objects/s, 262.5 KiB/s,
+      Test Maiden: 19.7 sends/s (19.3 with data), 1205 objects/s (12% new,
+      3% only a new owner), 262.5 KiB/s,
       window up to 38 KiB; 51% of sends full, 3% fell behind, 2% held back by
       a full queue, backlog up to 107 object(s); ping 42 ms (worst 95),
       delivery 100.0%, Steam queue up to 48 ms, Steam rate 384 KiB/s, Steam
@@ -132,6 +133,9 @@ PerformanceReportSeconds, NetworkSaturationWarning
 
     sends/s        should be near ZdoSendRate. Much lower means the server's
                    frame rate is the limit.
+    new, owner     share of objects the player had never received, and share
+                   sent again only because their owner changed. A large owner
+                   share while a player falls behind means ownership churn.
     full           the send ran out of window with changes left over. They go
                    in the next send, 50 ms later. Harmless on its own.
     fell behind    more was left over than the send carried. Changes pile up
