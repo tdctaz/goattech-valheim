@@ -50,6 +50,14 @@ dedicated server and on every client, all at the same version. Valheim Server To
   border of a zone that had not loaded yet
 - Fixed: a chest could refuse everyone, with no message, until the player who last opened it
   logged out and back in
+- Fixed: a creature killed at a large base could vanish and show its body and loot a second or
+  two later. Clients now create a fresh ragdoll and its loot ahead of the base still loading
+  around them
+- Crossing a zone border at a large base no longer sends the whole base to every player again:
+  building pieces and terrain edits stay owned by the server, so creatures near the player skip
+  far less
+- Every creature death near a player is timed on the server and on each client, so a late ragdoll
+  or late loot can be traced in the logs
 
 ### Rebalanced
 
