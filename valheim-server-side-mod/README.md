@@ -452,7 +452,7 @@ where `devcommands` cannot run from a client.
 
 | Line | Does |
 | --- | --- |
-| `<Prefab> <count> [tame]` | Spawns, optionally tamed. |
+| `<Prefab> <count> [tame] [metres]` | Spawns, optionally tamed, next to the player or that many metres away in a random direction, on the highest floor there. |
 | `water` | Re-runs the nearest sailable water report for the player. |
 | `diag` | What the server can see of the water at the player. |
 | `owners` | What the server owns around the player, by prefab. |

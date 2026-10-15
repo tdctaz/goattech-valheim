@@ -1,6 +1,7 @@
 #if DEBUG_TOOLS
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using BepInEx;
 using UnityEngine;
@@ -640,7 +641,23 @@ namespace ServerAuthority
 
             count = Mathf.Clamp(count, 1, MaxPerLine);
 
-            bool tame = parts.Length > 2 && string.Equals(parts[2], "tame", StringComparison.OrdinalIgnoreCase);
+            bool tame = false;
+            float distance = 0f;
+            for (int p = 2; p < parts.Length; p++)
+            {
+                if (string.Equals(parts[p], "tame", StringComparison.OrdinalIgnoreCase))
+                {
+                    tame = true;
+                }
+                else if (float.TryParse(parts[p], NumberStyles.Float, CultureInfo.InvariantCulture, out float metres) &&
+                         !float.IsNaN(metres) && !float.IsInfinity(metres))
+                {
+                    distance = Mathf.Clamp(metres, 0f, 100f);
+                }
+            }
+
+            float angle = UnityEngine.Random.Range(0f, Mathf.PI * 2f);
+            Vector3 centre = anchor.Position + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * distance;
 
             GameObject prefab = ZNetScene.instance.GetPrefab(name);
             if (prefab == null)
@@ -657,7 +674,13 @@ namespace ServerAuthority
             {
                 Vector3 jitter = UnityEngine.Random.insideUnitSphere * 1.5f;
                 jitter.y = 0f;
-                Vector3 position = anchor.Position + Vector3.up + jitter;
+                Vector3 position = centre + Vector3.up + jitter;
+                if (distance > 0f)
+                {
+                    position.y = ZoneSystem.instance.GetSolidHeight(position, out float floor)
+                        ? floor + 0.5f
+                        : ZoneSystem.instance.GetGroundHeight(position) + 0.5f;
+                }
 
                 GameObject go = UnityEngine.Object.Instantiate(prefab, position, Quaternion.identity);
                 ItemDrop item = go.GetComponent<ItemDrop>();
@@ -690,7 +713,7 @@ namespace ServerAuthority
 
             Plugin.Log.LogInfo(
                 $"Spawn request: {name} x{count}{(tame ? " tame" : "")} as {spawned} object(s) at " +
-                $"({anchor.Position.x:0}, {anchor.Position.z:0}).");
+                $"({centre.x:0}, {centre.z:0}), {distance:0} m from the player at ({anchor.Position.x:0}, {anchor.Position.z:0}).");
             return true;
         }
     }
