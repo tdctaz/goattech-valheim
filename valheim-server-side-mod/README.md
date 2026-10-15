@@ -105,7 +105,7 @@ in `BepInEx/plugins/` on both. Older packs shipped a `start_server_bepinex.sh` t
 variables for a Doorstop 4 library, and the server starts with no BepInEx at all.
 
 The server log should say `Server Authority active. Ownership mode: Always.` The mod warns at startup
-when the game version differs from the one it was verified against (1.0.17).
+when the game version differs from the one it was verified against (1.0.20).
 
 ## Configuration
 
@@ -213,7 +213,7 @@ an unreadable file as `.fch.unreadable`. To reset a character, delete the `.fch`
 An upload is checked for the name, the id against the stored copy, items that exist in `ObjectDB`
 with stacks and quality within limits, items marked as spawned with devcommands, skills within
 `MaxSkillLevel`, and optionally skill gain per hour and the profile's devcommands flag. If a game
-update moves the player data past version 33, which `PlayerDataSummary` mirrors from `Player.Save`,
+update moves the player data past version 34, which `PlayerDataSummary` mirrors from `Player.Save`,
 items and skills go unchecked with a warning. The client still simulates its own character, so a
 modified client can report invented gear as long as it is plausible.
 
@@ -409,7 +409,8 @@ dotnet run --project tools/PatchCheck -c Release -- \
 or replaces against a fresh decompilation: the merge in `ZDOMan.RPC_ZDOData` and `Container.SetInUse`,
 `CheckForChanges` and `RPC_RequestOpen`, which [handing objects back](#handing-objects-back) relies on, `ZDOMan.ReleaseZDOS`, `ZoneSystem.Update` and
 `IsActiveAreaLoaded`, `ZNetScene.CreateDestroyObjects` and `OutsideActiveArea`,
-`SpawnSystem.UpdateSpawning`, `RandEventSystem.FixedUpdate`, `Player.Save` (player data version),
+`SpawnSystem.UpdateSpawning`, `RandEventSystem.FixedUpdate`, `Player.Save` (the player data layout
+`ProfileCodec` reads and `FreshCharacter` writes), the cheat flag `Character.OnDeath` reads for `KillCredit`,
 `EnvMan.UpdateEnvironment` and `GetBiome`,
 `CookingStation.RPC_RemoveDoneItem` and `SpawnItem`, the stat counting in `TreeBase`, `TreeLog`,
 `MineRock`, `MineRock5`, `Character.RPC_Damage` and `Tameable.Tame`, `BaseAI.FindEnemy`,

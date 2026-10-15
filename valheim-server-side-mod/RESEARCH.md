@@ -407,3 +407,46 @@ What moved:
 The item, raid and location data the mods depend on still matches in the new server bundles: the
 staffs, root armor and tower shields Rebalanced changes carry the vanilla values its README quotes,
 and every raid name Creatures uses exists in the main scene or a `LocationList`.
+
+
+## 10. Re-verification against Valheim 1.0.20
+
+Diffing the publicized 1.0.17 and 1.0.20 client assemblies changes 30 files, not counting Unity's
+generated script list, and adds one, `CheatUtils`. The dedicated server's assembly carries the same changes, and `assembly_utils` is
+unchanged. `PatchCheck` resolves every target for all three mods against both the client and the
+dedicated server assemblies. Most of the update is a reset of the game's cheat flags.
+
+What moved, and what it meant for the mods:
+
+- The cheat flag on a ZDO (`ZDOVars.s_cheated`) is now an int, and only the value 2 counts. Vanilla
+  reads and writes it through the new `CheatUtils` extensions `IsCheated`, `SetCheated` and
+  `RemoveCheated`, so everything flagged before 1.0.20, which holds 1, is clean. Item data version
+  110 does the same for items: `ItemData.Load` ignores the cheat bit of anything saved before it.
+  `ItemDrop.EnsureValid`, which replaces `ResetVariantIfInvalid`, marks an item cheated when its
+  total damage exceeds 10000, which `Inventory.AddItem` used to do. `KillCredit` copied
+  `Character.OnDeath`'s read of the flag as `GetBool`, which still counted the old value, and now
+  calls `IsCheated`.
+- Player data version 34 appends two dictionaries after the build menu data: the pseudo random drop
+  counters and the upgrade item seeds. `PlayerDataSummary` stops reading at the skills, so nothing
+  it reads moved. It refused anything but 33, which left every 1.0.20 character with only its name,
+  id and cheat flag checked, and made `ResetToFresh` turn away every new player. It now reads 33 and
+  34. 33 has to stay, because uploads are read from the saved file, and a character last played
+  before the update holds 33 until its player spawns. `FreshCharacter` writes 34 with both
+  dictionaries empty.
+- `CharacterDrop.s_pseudoCounter`, the bad luck protection on drops with a chance of 0.3 or less, is
+  keyed by the prefab's hash plus the chance, no longer restarts when the chance changes, and is
+  saved with the character. It is static on whichever machine runs `GenerateDropList`, the
+  creature's owner. Under Server Authority that is the server, so the counters are shared by every
+  player and start over at each restart, where a vanilla server leaves them with whichever client
+  owned the creature. Clients still save theirs, which count only for a creature that dies while a
+  client owns it: a mount under its rider, or anything with `OwnershipMode = Vanilla`. Kept shared
+  on purpose: every player's kills advance the same countdown. Vanilla's is not per player either,
+  but belongs to whichever client owns the area.
+- The upgrade item roll in `InventoryGui.DoCrafting` comes from a per character seed,
+  `Player.GetItemUpgradeChance`. Crafting stays on the client, so the mod is not involved.
+- `CharacterDrop.Drop.m_levelMultiplierNotAmount`: a drop with it set has its chance raised by the
+  creature's level and its amount left alone. Creatures' transpiler still finds the one
+  `Mathf.Pow` in `GenerateDropList`, so its level multiplier reaches the chance and, where the flag
+  allows, the amount.
+- Network version 41, world version 42, player profile version 47. 1.0.17 clients cannot join, and a
+  world saved by 1.0.20 does not load in 1.0.17.

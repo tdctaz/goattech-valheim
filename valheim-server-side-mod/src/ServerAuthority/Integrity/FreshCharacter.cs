@@ -51,6 +51,9 @@ namespace ServerAuthority.Integrity
             pkg.Write(0f);
             pkg.Write(new byte[0]);
 
+            pkg.Write(0);
+            pkg.Write(0);
+
             return pkg.GetArray();
         }
 

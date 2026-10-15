@@ -302,7 +302,7 @@ namespace ServerAuthority.Integrity
                             $"Cannot check the items and skills in {session.Label}'s character ({error}). " +
                             "Checking its name, id and cheat flag only. A game update probably changed the save format.");
                     }
-                    else if (version >= 0 && version < PlayerDataSummary.SupportedPlayerDataVersion)
+                    else if (version >= 0 && version < PlayerDataSummary.OldestPlayerDataVersion)
                     {
                         problems.Add(
                             $"the character was saved by an older version of the game ({error}), load it once " +

@@ -73,7 +73,8 @@ namespace ServerAuthority.Integrity
 
     internal sealed class PlayerDataSummary
     {
-        internal const int SupportedPlayerDataVersion = 33;
+        internal const int OldestPlayerDataVersion = 33;
+        internal const int SupportedPlayerDataVersion = 34;
 
         internal readonly List<ItemSummary> Items = new List<ItemSummary>();
         internal readonly Dictionary<int, float> Skills = new Dictionary<int, float>();
@@ -92,9 +93,9 @@ namespace ServerAuthority.Integrity
             {
                 ZPackage pkg = new ZPackage(playerData);
                 int version = pkg.ReadInt();
-                if (version != SupportedPlayerDataVersion)
+                if (version < OldestPlayerDataVersion || version > SupportedPlayerDataVersion)
                 {
-                    error = $"player data version {version}, this mod reads {SupportedPlayerDataVersion}";
+                    error = $"player data version {version}, this mod reads {OldestPlayerDataVersion} to {SupportedPlayerDataVersion}";
                     return null;
                 }
 

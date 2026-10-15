@@ -56,7 +56,7 @@ namespace ServerAuthority
             }
 
             bool boss = character.IsBoss();
-            bool cheated = zdo.GetBool(ZDOVars.s_cheated);
+            bool cheated = zdo.IsCheated();
             List<string> keyed = new List<string>();
             foreach (KeyValuePair<long, Credit> entry in credits)
             {
