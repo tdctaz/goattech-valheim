@@ -67,6 +67,11 @@ Vanilla doubles loot with each star. That continues to two stars and then grows 
 | --- | --- | --- | --- | --- | --- | --- |
 | Loot | 1x | 2x | 4x | 6x | 8x | 10x |
 
+Since Valheim 1.0.20, trophies and a few gems (`m_levelMultiplierNotAmount` on the drop) take the
+multiplier on their chance instead of their count. So a creature still drops one trophy, just more
+often: a trophy with a 10% base chance always drops from a five star creature, and a 5% one half the
+time.
+
 Health and damage follow vanilla's rules, which already extend past two stars: health is the zero
 star health times the level, damage grows by half per star. A five star greydwarf has six times the
 health and three and a half times the damage.
