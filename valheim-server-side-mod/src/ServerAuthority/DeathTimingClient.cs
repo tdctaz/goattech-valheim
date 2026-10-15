@@ -9,7 +9,6 @@ namespace ServerAuthority
     internal static class DeathTimingClient
     {
         private const double HitWindowMs = 5000.0;
-        private const long FreshTicks = 10 * TimeSpan.TicksPerSecond;
         private const double MatchMs = 5000.0;
         private const float MatchMetres = 5f;
         private const float NearbyMetres = 64f;
@@ -69,8 +68,6 @@ namespace ServerAuthority
 
         private static readonly Dictionary<int, bool> LeavesRagdoll = new Dictionary<int, bool>();
 
-        private static HashSet<int> _ragdolls;
-        private static HashSet<int> _items;
         private static int _lootPending;
         private static int _frameIndex;
         private static long _lastTick;
@@ -94,8 +91,6 @@ namespace ServerAuthority
             Array.Clear(FrameEnds, 0, FrameHistory);
             Array.Clear(FrameLengths, 0, FrameHistory);
             LeavesRagdoll.Clear();
-            _ragdolls = null;
-            _items = null;
             _lootPending = 0;
             _frameIndex = 0;
             _lastTick = 0;
@@ -141,14 +136,14 @@ namespace ServerAuthority
 
         internal static void Received(ZDO zdo)
         {
-            if (!Active || zdo.Created || !PrefabSets())
+            if (!Active || zdo.Created)
             {
                 return;
             }
 
             int prefab = zdo.GetPrefab();
-            bool ragdoll = _ragdolls.Contains(prefab);
-            if (!ragdoll && (_lootPending == 0 || !_items.Contains(prefab)))
+            bool ragdoll = PrefabKinds.IsRagdoll(prefab);
+            if (!ragdoll && (_lootPending == 0 || !PrefabKinds.IsItem(prefab)))
             {
                 return;
             }
@@ -162,7 +157,7 @@ namespace ServerAuthority
             Vector3 position = zdo.GetPosition();
             if (ragdoll
                     ? (position - player.transform.position).sqrMagnitude > NearbyMetres * NearbyMetres
-                    : !IsFresh(zdo) || NearestPendingLoot(position) == null)
+                    : !PrefabKinds.IsFreshDrop(zdo) || NearestPendingLoot(position) == null)
             {
                 return;
             }
@@ -304,7 +299,7 @@ namespace ServerAuthority
             }
 
             ZDO zdo = item.m_nview.GetZDO();
-            Seen seen = IsFresh(zdo) ? NearestPendingLoot(zdo.GetPosition()) : null;
+            Seen seen = PrefabKinds.IsFreshDrop(zdo) ? NearestPendingLoot(zdo.GetPosition()) : null;
             if (seen == null)
             {
                 return;
@@ -581,49 +576,6 @@ namespace ServerAuthority
                 frames++;
                 worst = Math.Max(worst, FrameLengths[i]);
             }
-        }
-
-        private static bool PrefabSets()
-        {
-            if (_ragdolls != null)
-            {
-                return true;
-            }
-
-            ZNetScene scene = ZNetScene.instance;
-            if (scene == null)
-            {
-                return false;
-            }
-
-            var ragdolls = new HashSet<int>();
-            var items = new HashSet<int>();
-            foreach (KeyValuePair<int, GameObject> entry in scene.m_namedPrefabs)
-            {
-                if (entry.Value == null)
-                {
-                    continue;
-                }
-
-                if (entry.Value.GetComponent<Ragdoll>() != null)
-                {
-                    ragdolls.Add(entry.Key);
-                }
-                else if (entry.Value.GetComponent<ItemDrop>() != null)
-                {
-                    items.Add(entry.Key);
-                }
-            }
-
-            _items = items;
-            _ragdolls = ragdolls;
-            return true;
-        }
-
-        private static bool IsFresh(ZDO zdo)
-        {
-            long spawned = zdo.GetLong(ZDOVars.s_spawnTime);
-            return spawned != 0 && ZNet.instance != null && ZNet.instance.GetTime().Ticks - spawned < FreshTicks;
         }
 
         private static bool ExpectsRagdoll(int hash)

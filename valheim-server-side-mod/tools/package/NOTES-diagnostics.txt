@@ -81,6 +81,15 @@ ClearTeleportGhosts
     portal they just went through. Each cleanup is logged as "Cleared a
     teleport ghost".
 
+CreateFreshDropsFirst
+    Client side, read from each player's own config. Leave true. A client
+    creates every building piece, tree and rock waiting to load before any
+    ragdoll or item, so after crossing a zone border at a large base a kill
+    showed its body and loot seconds late. This creates ragdolls and items
+    dropped in the last ten seconds within 48 m first. The death timing
+    lines show the effect as the time a ragdoll "arrived before it was
+    created".
+
 MaxObjectsCreatedPerFrame
     Lower if the server stutters when players explore quickly. Raise if
     players outrun the world loading in around them.

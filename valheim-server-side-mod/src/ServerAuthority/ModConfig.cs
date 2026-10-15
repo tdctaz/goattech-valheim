@@ -16,6 +16,7 @@ namespace ServerAuthority
         internal static ConfigEntry<bool> FairZdoSending;
         internal static ConfigEntry<bool> FollowLivePlayerPosition;
         internal static ConfigEntry<bool> ClearTeleportGhosts;
+        internal static ConfigEntry<bool> CreateFreshDropsFirst;
         internal static ConfigEntry<int> ZdoSendWindowMaxKiB;
         internal static ConfigEntry<int> SteamSendRateKiB;
 
@@ -160,6 +161,15 @@ namespace ServerAuthority
                 "player walking through a portal.\nVanilla checks whether an object left each player's " +
                 "area before it stores the object's new position, so it tests the old one, finds " +
                 "nothing left, and the players at the portal keep seeing a frozen copy standing there.");
+
+            CreateFreshDropsFirst = config.Bind("Performance", "CreateFreshDropsFirst", true,
+                "On a client, create ragdolls and items dropped in the last ten seconds within 48m ahead of " +
+                "everything else waiting to be created.\nVanilla creates every building piece, tree and rock " +
+                "waiting to load before any ragdoll or item, and nothing at all until every zone around the " +
+                "player is built, so after crossing a zone border at a large base a kill showed its body and " +
+                "loot seconds late. One is held back until its own zone is built and while a building " +
+                "piece, ship or rock within 16m of it, or the terrain it rests on, is still waiting, so a " +
+                "ragdoll never lands before the floor under it exists.");
 
             KeepShipOwnedByDriver = config.Bind("Vehicles", "KeepShipOwnedByDriver", false,
                 "Hand a crewed ship back to whoever is at the rudder, instead of the server " +

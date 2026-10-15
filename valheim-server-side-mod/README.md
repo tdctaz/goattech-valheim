@@ -128,6 +128,7 @@ are configured on the server only. Settings marked *debug* exist only in a
 | `Performance.ZdoSendWindowMaxKiB` | `64` | Cap on object data in flight to one player. Vanilla is 10. |
 | `Performance.SteamSendRateKiB` | `384` | Steam's send rate per player. `0` keeps vanilla's 150. Needs upload for every player at once. |
 | `Performance.ClearTeleportGhosts` | `true` | Fixes players seeing a frozen copy of someone at a portal they used. |
+| `Performance.CreateFreshDropsFirst` | `true` | Client side. Ragdolls and fresh loot near the player are created ahead of the queue of objects waiting to load. |
 | `Vehicles.KeepShipOwnedByDriver` | `false` | Fallback only: hands a steered boat to its driver. |
 | `Vehicles.KeepVehiclesOwnedByUser` | `true` | Leases mounts and carts to their user. Leave on. |
 | `Vehicles.HoldHullsUntilWaterLoads` | `true` | Holds a server-owned hull still until the zones under it exist. Leave on. |
@@ -296,6 +297,18 @@ that only relays:
 client reports every two seconds, which trails a sailing player by 20 metres. `ClearTeleportGhosts`
 repeats the zone departure check that `ZDO.InternalSetPosition` runs against the old position, so
 players at a portal are told the traveller has left.
+
+A client creates the objects it receives at ten per 1/30 s, or a hundredth of the queue when more
+are waiting, and creates nothing until every zone around the player is built. It takes every
+building piece, tree and rock before any ragdoll, item or creature, however far away the piece is.
+Crossing a zone border at a large base queues hundreds of pieces, so a creature killed just then
+vanished at once but showed its ragdoll and loot seconds later. In vanilla the area's owner creates
+both itself the moment the creature dies, so only other players waited. `CreateFreshDropsFirst`
+creates ragdolls, and items dropped in the last ten seconds, within 48 m ahead of the queue. One
+waits until its own zone is built and while a building piece, ship or rock within 16 m of it, or
+the terrain it rests on, is still queued, so a ragdoll does not land before its floor. It is
+dropped if the player moves more than 48 m away or it is still waiting after ten seconds, and
+vanilla then creates it in its usual turn.
 
 ### Reading the network report
 

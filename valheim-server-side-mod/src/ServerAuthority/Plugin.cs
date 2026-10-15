@@ -128,7 +128,9 @@ namespace ServerAuthority
             SummonSkill.Reset();
             AchievementGate.Reset();
             Plugin.EvaluateSession();
+            PrefabKinds.Reset();
             DeathTimingClient.Reset(__instance);
+            CreationPriority.Reset(__instance);
             KillCredit.Register();
             StatCredit.Register();
             PlayerLaunch.Register();
@@ -164,6 +166,8 @@ namespace ServerAuthority
             ServerControl.Reset();
             ServerPerformance.Reset();
             DeathTimingClient.Reset(null);
+            CreationPriority.Reset(null);
+            PrefabKinds.Reset();
             AchievementGate.Reset();
             Patches.ZDOMan_SendZDOToPeers2_Patch.Reset();
             Patches.EnvMan_UpdateEnvironment_Patch.Forget();

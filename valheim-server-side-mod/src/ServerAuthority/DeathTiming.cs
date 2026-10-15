@@ -91,7 +91,6 @@ namespace ServerAuthority
         private static readonly Dictionary<ZDOID, Hit> Hits = new Dictionary<ZDOID, Hit>();
         private static readonly List<Death> Open = new List<Death>();
         private static readonly Dictionary<ZDOID, Death> Watched = new Dictionary<ZDOID, Death>();
-        private static readonly Dictionary<int, bool> ItemPrefabs = new Dictionary<int, bool>();
 
         private static readonly Samples HitToDeath = new Samples();
         private static readonly Samples RemovalWait = new Samples();
@@ -119,7 +118,6 @@ namespace ServerAuthority
             Hits.Clear();
             Open.Clear();
             Watched.Clear();
-            ItemPrefabs.Clear();
             ClearPeriod();
             _dying = null;
             _looting = null;
@@ -274,7 +272,7 @@ namespace ServerAuthority
         internal static void Created(ZDO zdo, int prefab)
         {
             Death death = _looting ?? _dying;
-            if (death == null || zdo == null || death.Peers.Count == 0 || !IsItem(prefab))
+            if (death == null || zdo == null || death.Peers.Count == 0 || !PrefabKinds.IsItem(prefab))
             {
                 return;
             }
@@ -665,19 +663,6 @@ namespace ServerAuthority
             }
 
             return "an unknown attacker";
-        }
-
-        private static bool IsItem(int prefab)
-        {
-            if (ItemPrefabs.TryGetValue(prefab, out bool item))
-            {
-                return item;
-            }
-
-            GameObject go = ZNetScene.instance != null ? ZNetScene.instance.GetPrefab(prefab) : null;
-            item = go != null && go.GetComponent<ItemDrop>() != null;
-            ItemPrefabs[prefab] = item;
-            return item;
         }
 
         private static double Ms(long from, long to)
