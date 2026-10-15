@@ -95,6 +95,12 @@ namespace ServerAuthority
                     Plugin.Log.LogInfo(network);
                 }
 
+                string ownership = OwnershipPolicy.ClosePeriod(reportLength);
+                if (ownership != null)
+                {
+                    Plugin.Log.LogInfo(ownership);
+                }
+
                 string deaths = DeathTiming.ClosePeriod(reportLength);
                 if (deaths != null)
                 {

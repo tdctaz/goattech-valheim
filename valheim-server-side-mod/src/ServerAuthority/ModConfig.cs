@@ -52,6 +52,7 @@ namespace ServerAuthority
         internal static ConfigEntry<float> ShipWakeTrailSeconds;
         internal static ConfigEntry<float> ShipWakeSink;
         internal static ConfigEntry<bool> ServerOwnsWaterborne;
+        internal static ConfigEntry<bool> KeepStaticObjectsOwned;
 
         internal static ConfigEntry<bool> ModValidationEnabled;
         internal static ConfigEntry<string> ServerOnlyMods;
@@ -395,6 +396,17 @@ namespace ServerAuthority
                     "another means those inputs disagree, and comparing two of these logs by their " +
                     "'second=' key is the only way to say which one. 0 disables.",
                     new AcceptableValueRange<float>(0f, 600f)));
+
+            KeepStaticObjectsOwned = config.Bind("Ownership", "KeepStaticObjectsOwned", true,
+                "Keep building pieces, trees, small rocks and terrain edits owned by the server once a player " +
+                "has been near them, instead of releasing them when every player has moved on.\nEvery change " +
+                "of owner is sent again to every player who has the object, so a step across a zone border " +
+                "at a large base re-sent thousands of walls and floors ahead of the creatures around the " +
+                "player, and they skipped. Objects that act on their own, such as fires, smelters, chests, " +
+                "doors, turrets and large mineable rocks, are still released, so where things are simulated " +
+                "does not change. A kept piece outside every player's active area is still not worn or " +
+                "checked for support, but it now takes damage when something hits it, where an unowned one " +
+                "ignored the hit.");
 
             ServerOwnsWaterborne = config.Bind("Ownership", "ServerOwnsWaterborne", true,
                 "Let the server own boats and other floating objects, so that a drifting boat or a " +

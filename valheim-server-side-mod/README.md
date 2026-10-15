@@ -118,6 +118,7 @@ are configured on the server only. Settings marked *debug* exist only in a
 | `General.Enabled` | `true` | Master switch. |
 | `General.RequireDedicatedServer` | `true` | Only activate on a dedicated server. |
 | `Ownership.Mode` | `Always` | `Vanilla` leaves ownership alone, to isolate whether a problem is this mod. |
+| `Ownership.KeepStaticObjectsOwned` | `true` | Building pieces, trees, small rocks and terrain edits stay server owned instead of being released when players move on, so a step across a zone border does not re-send a whole base. |
 | `Ownership.ServerOwnsWaterborne` | `true` | Let the server own boats and floating objects. Off gives an unmanned hull to the nearest client, as vanilla. |
 | `Performance.MaxObjectsCreatedPerFrame` | `100` | Lower if the server stutters, raise if players outrun object loading. |
 | `Performance.ZoneEvictionsPerTick` | `0` | Expired zones unloaded per 0.1s tick. `0` is one per player; vanilla is one. |
@@ -309,6 +310,19 @@ waits until its own zone is built and while a building piece, ship or rock withi
 the terrain it rests on, is still queued, so a ragdoll does not land before its floor. It is
 dropped if the player moves more than 48 m away or it is still waiting after ten seconds, and
 vanilla then creates it in its usual turn.
+
+Every change of an object's owner bumps its owner revision, and the server then sends the whole
+object again to every player who has it. The policy released everything outside the players'
+active areas, so a step across a zone border at a large base moved thousands of walls and floors in
+or out of the active area and re-sent all of them, ahead of the creatures around the player.
+`KeepStaticObjectsOwned` keeps the server as owner of a building piece, tree, small rock or terrain
+edit once it has owned it, when the prefab has no rigidbody and only passive components. Anything
+else is released as before, and each performance report names the prefabs released that way:
+
+```
+Ownership over 600s: 312 change(s). Released outside players' active areas because they act on
+their own: piece_chest (Container), fire_pit (Fireplace), wood_door (Rigidbody).
+```
 
 ### Reading the network report
 

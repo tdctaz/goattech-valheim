@@ -33,6 +33,15 @@ Mode
     Vanilla - ownership untouched. Use this to test whether a problem is
               caused by this mod. Everything else still loads.
 
+KeepStaticObjectsOwned
+    Leave true. Keeps building pieces, trees, small rocks and terrain edits
+    owned by the server once it has owned them, instead of releasing them
+    when players move on. Each release changed the owner, and every owner
+    change is sent again to every player, so a step across a zone border at
+    a large base re-sent thousands of pieces and creatures skipped. The
+    performance report's "Ownership" line counts owner changes and names
+    the prefabs still released because they act on their own.
+
 ServerOwnsWaterborne
     Lets the server own boats and floating objects. Leave true: every
     passenger then gets the same hull physics whoever is steering.

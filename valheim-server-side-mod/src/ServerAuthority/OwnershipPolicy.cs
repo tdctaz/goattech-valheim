@@ -16,6 +16,7 @@ namespace ServerAuthority
 
         private static double _clock;
         private static double _lastStatus;
+        private static int _periodTransfers;
 
         internal static double Clock => _clock;
 
@@ -35,8 +36,10 @@ namespace ServerAuthority
             SpawnRequests.Reset();
 #endif
             Waterborne.Reset();
+            StaticObjects.Reset();
             _clock = 0.0;
             _lastStatus = 0.0;
+            _periodTransfers = 0;
         }
 
         internal static void Advance(float dt)
@@ -84,6 +87,7 @@ namespace ServerAuthority
                 }
 
                 long target;
+                bool kept = false;
                 if (OwnershipLeases.TryGetOwner(zdo.m_uid, out long leased))
                 {
                     target = leased;
@@ -105,14 +109,15 @@ namespace ServerAuthority
                 }
                 else if (Players[i] == 0)
                 {
-                    target = 0L;
+                    kept = zdo.GetOwner() == server && StaticObjects.StaysOwned(zdo);
+                    target = kept ? server : 0L;
                 }
                 else
                 {
                     target = server;
                 }
 
-                if (target == server)
+                if (target == server && !kept)
                 {
                     simulated++;
                 }
@@ -153,6 +158,7 @@ namespace ServerAuthority
                 transfers++;
             }
 
+            _periodTransfers += transfers;
             PruneClaims();
             OwnershipHandback.Prune();
             OwnershipLeases.PruneExpired();
@@ -200,6 +206,19 @@ namespace ServerAuthority
 
             PeerClaims.Remove(zdo.m_uid);
             return true;
+        }
+
+        internal static string ClosePeriod(float seconds)
+        {
+            string released = StaticObjects.TakeReleased();
+            string text = seconds > 0f
+                ? $"Ownership over {seconds:F0}s: {_periodTransfers} change(s)." +
+                  (released != null
+                      ? $" Released outside players' active areas because they act on their own: {released}."
+                      : "")
+                : null;
+            _periodTransfers = 0;
+            return text;
         }
 
         private static void PruneClaims()
