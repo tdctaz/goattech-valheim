@@ -36,6 +36,7 @@ namespace ServerAuthority
             _lastWarning = float.MinValue;
             ResetReport(0f);
             NetworkStats.Reset();
+            DeathTiming.Reset();
         }
 
         private static void ResetReport(float now)
@@ -52,6 +53,7 @@ namespace ServerAuthority
         {
             float now = Time.realtimeSinceStartup;
             NetworkStats.Tick(now);
+            DeathTiming.Tick();
             if (_lastFrame < 0f)
             {
                 _lastFrame = now;
@@ -91,6 +93,12 @@ namespace ServerAuthority
                 if (network != null)
                 {
                     Plugin.Log.LogInfo(network);
+                }
+
+                string deaths = DeathTiming.ClosePeriod(reportLength);
+                if (deaths != null)
+                {
+                    Plugin.Log.LogInfo(deaths);
                 }
 
                 string handbacks = OwnershipHandback.ClosePeriod(reportLength);

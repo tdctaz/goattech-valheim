@@ -29,6 +29,7 @@ namespace ServerAuthority
         internal static ConfigEntry<int> SlowFrameRateWarning;
         internal static ConfigEntry<int> HitchWarningMilliseconds;
         internal static ConfigEntry<int> NetworkSaturationWarning;
+        internal static ConfigEntry<int> SlowDeathWarningMilliseconds;
         internal static ConfigEntry<bool> LogShipDamage;
         internal static ConfigEntry<float> WaveSyncIntervalSeconds;
 #if DEBUG_TOOLS
@@ -543,6 +544,16 @@ namespace ServerAuthority
                     "the player's ping, Steam queue and rate, and what was being sent. At most one a " +
                     "minute. 0 disables.",
                     new AcceptableValueRange<int>(0, 100)));
+
+            SlowDeathWarningMilliseconds = config.Bind("Debug", "SlowDeathWarningMilliseconds", 250,
+                new ConfigDescription(
+                    "Log a line for each creature death near a player that took longer than this to reach " +
+                    "them. The server times the killing hit to the death, the death to the ragdoll being sent " +
+                    "to each player within 64m, and the loot's release to it being sent. A client times the " +
+                    "death on the server to its ragdoll appearing, and its own last hit to the ragdoll. 1 logs " +
+                    "every death, 0 turns the lines off. The performance report summarises all deaths either " +
+                    "way, on the server and on each client.",
+                    new AcceptableValueRange<int>(0, 60000)));
         }
     }
 }

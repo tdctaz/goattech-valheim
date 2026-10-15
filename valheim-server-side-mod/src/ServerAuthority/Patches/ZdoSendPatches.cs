@@ -132,6 +132,7 @@ namespace ServerAuthority.Patches
             if ((!flush && queue > window) || budget < MinimumPackage)
             {
                 NetworkStats.RecordQueueFull(peer.m_peer, window);
+                DeathTiming.Held(peer.m_peer);
                 return false;
             }
 
@@ -191,6 +192,11 @@ namespace ServerAuthority.Patches
                 zdo.Serialize(Data);
                 package.Write(Data);
                 peer.m_zdos[zdo.m_uid] = new ZDOMan.ZDOPeer.PeerZDOInfo(zdo.DataRevision, zdo.OwnerRevision, time);
+                if (DeathTiming.Following)
+                {
+                    DeathTiming.Sent(peer.m_peer, zdo.m_uid, queue);
+                }
+
                 man.m_zdosSent++;
                 sent++;
 

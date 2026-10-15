@@ -140,6 +140,19 @@ PerformanceReportSeconds, NetworkSaturationWarning
     minute, when a player fell behind or was held back in at least that
     percentage of sends over ten seconds.
 
+SlowDeathWarningMilliseconds
+    A creature killed near a player is timed on the server and on every
+    client. A line is logged for each death slower than this, and both
+    sides summarise all deaths in the performance report. 1 logs every
+    death, 0 turns the lines off.
+
+    The server line gives, per player within 64 m, how much data was
+    already queued when the creature was removed (the removal waits behind
+    it), when the ragdoll was sent and when the loot was sent. The client
+    line gives when the ragdoll appeared after the death on the server,
+    how long it waited to be created, the time from the player's own last
+    hit, and the worst client frame. Match the two by the ragdoll id.
+
 LogOwnershipChanges
     A line for every single ownership change. Very noisy, and on a busy server
     it will dominate the log. Turn on only when chasing a specific problem,

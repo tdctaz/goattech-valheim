@@ -149,6 +149,7 @@ are configured on the server only. Settings marked *debug* exist only in a
 | `Debug.SlowFrameRateWarning` | `20` | Warn when the server averages fewer FPS than this over ten seconds, listing what is near each player. At most once a minute. |
 | `Debug.HitchWarningMilliseconds` | `500` | The same warning for one frame longer than this. |
 | `Debug.NetworkSaturationWarning` | `50` | Warn when this percentage of sends to a player fell behind or were held back over ten seconds. |
+| `Debug.SlowDeathWarningMilliseconds` | `250` | Log each creature death that took longer than this to reach a nearby player, on the server and on each client. `1` logs every death. See [Reading the death timing lines](#reading-the-death-timing-lines). |
 | `Debug.ForceEnvironment` | empty | *Debug.* Pin the weather, such as `ThunderStorm`. Set it identically everywhere or it causes a desync. |
 | `Debug.LogOwnershipChanges` | `false` | *Debug.* Every takeover and handback. Noisy. |
 | `Debug.LogShipState` | `false` | *Debug.* Hull height, buoyancy, zones and health. |
@@ -314,6 +315,54 @@ Most sent: 43% Deer, 34% Wolf, 6% Neck, ...
   the limit.
 - **send work** is server CPU spent packing updates; it grows with base size and send rate.
 - **Most sent** is the share of bytes by prefab.
+
+### Reading the death timing lines
+
+A creature killed near a player is timed on both sides of the connection, so a death that shows
+late can be placed on the server, the network or the client. Each line carries the wall clock time
+and the creature's and ragdoll's object ids, which tie a client's line to the server's.
+
+```
+Death at 14:03:22.512: Greydwarf 1:4523 at (2766, 34, 6265), ragdoll 1:4530. Last hit, by Fria,
+arrived 12 ms before the death. Fria (ping 4 ms): removal queued behind 20.5 KiB (about
+53 ms at the send rate), ragdoll sent 31 ms after the death behind 22.0 KiB, first loot sent 6 ms
+after its release behind 3.1 KiB. 3 loot object(s) released 2004 ms after the death. Worst server frame 19 ms.
+```
+
+- **Last hit ... before the death** is the server's own delay, normally under one frame. The
+  attacker is a player or a creature's prefab, such as `Lox`. A creature killed by burning or
+  poison shows its last direct hit, which can be seconds earlier.
+- **Removal queued behind** is the data already waiting on that player's connection when the
+  creature was removed. The removal travels behind it, so the creature keeps standing on the
+  player's screen for about that long plus the ping. The time is estimated from the send rate.
+- A player who leaves the area or disconnects before the ragdoll or loot reaches them is noted as
+  such rather than counted as never sent.
+- **Ragdoll sent** is when the ragdoll went into that player's object updates. Sends held back by
+  a full queue are counted.
+- **Loot released** is the ragdoll's own timer, 2 s for a greydwarf, which is vanilla.
+
+```
+Death seen at 14:03:22.640: Greydwarf_ragdoll 1:4530 at (2766, 34, 6265), 6 m away. Ragdoll
+shown 128 ms after the death on the server, by the clocks of both machines; it arrived 8 ms before
+it was created, with 3 object(s) waiting to be created. Your last hit on Greydwarf 1:4523 was 140 ms
+before it vanished, and the ragdoll showed 10 ms after that. Loot shown 2010 ms after the ragdoll,
+6 ms after the ragdoll was removed here, arrived 2 ms before it was created. Worst frame 33 ms over
+9 frame(s) in 150 ms. Ping 4 ms, 1234 object update(s) received in the last second.
+```
+
+- **Shown after the death on the server** compares the two machines' clocks, so it is exact only
+  when they agree, and it does not by itself make a line slow. The other times are measured on
+  the client alone.
+- **Arrived before it was created** is the client's own delay. Vanilla creates ten objects per
+  1/30 s, or a hundredth of the queue when more are waiting, and every building piece, tree and
+  rock before any ragdoll, item or creature. The waiting count shows how many were queued.
+- Loot is timed from its first item, and only items dropped in the last ten seconds count.
+- **Your last hit ... before it vanished** covers the whole round trip for the player's own kill.
+  A creature counts as the player's kill when they hit it in the last five seconds before it
+  vanished.
+- **Worst frame** is the longest client frame in that span.
+
+Both sides add a summary to each performance report, with the median and worst of each delay.
 
 ## Vanilla code that assumes a client owner
 
