@@ -58,6 +58,8 @@ dedicated server and on every client, all at the same version. Valheim Server To
   far less
 - Every creature death near a player is timed on the server and on each client, so a late ragdoll
   or late loot can be traced in the logs
+- Fixed: a character holding an item refined at the Forge of Potential had every save refused, or
+  was kicked, because the item was above its normal maximum quality
 
 ### Rebalanced
 
