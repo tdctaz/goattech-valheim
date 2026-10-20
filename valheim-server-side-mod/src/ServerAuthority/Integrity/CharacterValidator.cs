@@ -13,6 +13,9 @@ namespace ServerAuthority.Integrity
 
     internal static class CharacterValidator
     {
+        private static ObjectDB _refinableDb;
+        private static HashSet<int> _refinable = new HashSet<int>();
+
         internal static List<string> Validate(
             PlayerProfile profile,
             PlayerDataSummary summary,
@@ -48,6 +51,7 @@ namespace ServerAuthority.Integrity
             }
 
             ObjectDB db = ObjectDB.instance;
+            HashSet<int> refinable = ForgeRefinableHashes(db);
             foreach (ItemSummary item in summary.Items)
             {
                 GameObject prefab = db != null ? db.GetItemPrefab(item.PrefabHash) : null;
@@ -64,7 +68,8 @@ namespace ServerAuthority.Integrity
                     problems.Add($"{prefab.name} stack of {item.Stack}, the most is {shared.m_maxStackSize}");
                 }
 
-                if (item.Quality < 1 || item.Quality > Math.Max(1, shared.m_maxQuality))
+                bool overMax = item.Quality > Math.Max(1, shared.m_maxQuality) && !refinable.Contains(item.PrefabHash);
+                if (item.Quality < 1 || overMax)
                 {
                     problems.Add($"{prefab.name} at quality {item.Quality}, the most is {shared.m_maxQuality}");
                 }
@@ -142,6 +147,45 @@ namespace ServerAuthority.Integrity
                     yield break;
                 }
             }
+        }
+
+        private static HashSet<int> ForgeRefinableHashes(ObjectDB db)
+        {
+            if (db == null)
+            {
+                return new HashSet<int>();
+            }
+
+            if (db == _refinableDb)
+            {
+                return _refinable;
+            }
+
+            HashSet<int> hashes = new HashSet<int>();
+
+            foreach (Recipe recipe in db.m_recipes)
+            {
+                if (recipe == null || recipe.m_item == null || recipe.m_resources == null ||
+                    recipe.m_item.m_itemData.m_shared.m_maxQuality <= 1)
+                {
+                    continue;
+                }
+
+                foreach (Piece.Requirement requirement in recipe.m_resources)
+                {
+                    if (requirement != null && requirement.m_upgraderResource)
+                    {
+                        hashes.Add(recipe.m_item.gameObject.name.GetStableHashCode());
+                        break;
+                    }
+                }
+            }
+
+            _refinableDb = db;
+            _refinable = hashes;
+            Plugin.Log.LogInfo(
+                $"Character checks: {hashes.Count} items can be refined at the Forge of Potential and may exceed their max quality.");
+            return hashes;
         }
 
         private static HashSet<int> DefaultItemHashes()

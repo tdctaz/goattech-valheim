@@ -215,7 +215,8 @@ an unreadable file as `.fch.unreadable`. To reset a character, delete the `.fch`
 
 An upload is checked for the name, the id against the stored copy, items that exist in `ObjectDB`
 with stacks and quality within limits, items marked as spawned with devcommands, skills within
-`MaxSkillLevel`, and optionally skill gain per hour and the profile's devcommands flag. If a game
+`MaxSkillLevel`, and optionally skill gain per hour and the profile's devcommands flag. An item the
+Forge of Potential can refine has no upper quality limit, since the forge sets none. If a game
 update moves the player data past version 34, which `PlayerDataSummary` mirrors from `Player.Save`,
 items and skills go unchecked with a warning. The client still simulates its own character, so a
 modified client can report invented gear as long as it is plausible.

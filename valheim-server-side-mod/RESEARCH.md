@@ -443,7 +443,14 @@ What moved, and what it meant for the mods:
   on purpose: every player's kills advance the same countdown. Vanilla's is not per player either,
   but belongs to whichever client owns the area.
 - The upgrade item roll in `InventoryGui.DoCrafting` comes from a per character seed,
-  `Player.GetItemUpgradeChance`. Crafting stays on the client, so the mod is not involved.
+  `Player.GetItemUpgradeChance`. Crafting stays on the client, so the mod is not involved in the
+  roll. The Forge of Potential refines an item past `m_maxQuality` with no limit, which made
+  `CharacterValidator` reject every upload from a character holding one. Any item whose recipe
+  takes an idol (a `Piece.Requirement` with `m_upgraderResource`) and has `m_maxQuality` above 1,
+  which is what the forge's upgrade list requires, may now exceed it. Disabled recipes count too,
+  because `Player.GetAvailableRecipes` offers a seasonal recipe while its season runs. Every idol
+  has `m_upgradeChance` 0.65 and `m_breakChance` 1, so an attempt either succeeds or destroys the
+  item, and the branch that drops it two levels, which could reach quality 0, never runs.
 - `CharacterDrop.Drop.m_levelMultiplierNotAmount`: a drop with it set has its chance raised by the
   creature's level and its amount left alone. Creatures' transpiler still finds the one
   `Mathf.Pow` in `GenerateDropList`, so its level multiplier reaches the chance and, where the flag
