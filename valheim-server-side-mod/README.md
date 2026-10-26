@@ -24,6 +24,8 @@ second pass finds a new owner. That pause is the hitch felt when the "area host"
 - Optional: refuse clients that do not run the same mods, keep characters on the server, and
   accept commands from the [server tool](../valheim-server-tool/README.md).
 - Achievements count on a Server Authority server, which BepInEx otherwise prevents.
+- A thrown spear that misses everything lands as an item instead of vanishing in the air. See
+  [Thrown spears](#thrown-spears).
 
 The client half is required. It publishes state only a player's own machine has, receives the
 credits, launches and keys the server earns on a player's behalf, and computes the same sea as the
@@ -242,6 +244,31 @@ Cheating is not opened up. On a dedicated server a client cannot run cheat comma
 (`Terminal.IsCheatsEnabled` needs `ZNet.IsServer`); an admin's command runs on the server, which
 logs `Remote admin '<id>' executed command`. Progress from before this was never recorded, so it
 starts from zero. Each player's log says at spawn whether achievements are allowed, and if not, why.
+
+## Thrown spears
+
+A thrown spear is only a projectile until it hits something, and only the hit turns it back into an
+item. Vanilla deletes the projectile, spear and all, when its 10 second flight time runs out, or when
+it leaves the area loaded around its thrower, about 130 to 190 m out at simulation distance 2. A
+spear thrown off a mountain or over a cliff is lost either way.
+
+Server Authority drops the spear as an item at that point instead. Only weapons that train the
+Spears skill are affected. The Abyssal Harpoon is never thrown away, and nothing else thrown or shot
+is touched.
+
+- When the flight time runs out, the spear still gets its last physics step, so a hit at the very
+  end counts as in vanilla. Otherwise it becomes an item where it is, still moving at the
+  projectile's velocity, and carries on and lands. Spear rigidbodies use continuous collision
+  detection, so a fast drop does not pass through the ground.
+- When it leaves the loaded area, it becomes an item at rest at that point. The item is outside
+  everybody's loaded area too, so it waits in the air until somebody comes near enough to load it,
+  and falls then.
+- The thrower's own client simulates the throw, so that is where this happens, and each landing is
+  logged there, for example: `Thrown SpearWolfFang (quality 4, made by Fria EmberHeart) was still
+  flying 142 m from Fria EmberHeart when its flight time ran out, so it was dropped as an item at
+  (-1874.3, 201.6, 1569.0), still moving 46 m/s, instead of being deleted.`
+- From then on it is an ordinary dropped item, which vanilla removes once it is an hour old if it is
+  outside a base with nobody within 25 m.
 
 ## Waves and weather
 
@@ -495,7 +522,8 @@ or replaces against a fresh decompilation: the merge in `ZDOMan.RPC_ZDOData` and
 `EnvMan.UpdateEnvironment` and `GetBiome`,
 `CookingStation.RPC_RemoveDoneItem` and `SpawnItem`, the stat counting in `TreeBase`, `TreeLog`,
 `MineRock`, `MineRock5`, `Character.RPC_Damage` and `Tameable.Tame`, `BaseAI.FindEnemy`,
-`ArcheryTarget.OnProjectileHit`, `Tameable.UnsummonMaxInstances`, `Pet`, and the RPC replacements
+`ArcheryTarget.OnProjectileHit`, the flight time in `Projectile.FixedUpdate` and `SpawnOnHit` that
+`ThrownSpears` mirrors, the removal in `ZNetScene.RemoveObjects`, `Tameable.UnsummonMaxInstances`, `Pet`, and the RPC replacements
 `Pickable.RPC_Pick` and `Trap.RPC_OnStateChanged`. `RESEARCH.md` records
 how Valheim distributes authority and what earlier game versions changed.
 
@@ -568,6 +596,7 @@ src/ServerAuthority/
   BedSpawnPoint.cs        A destroyed bed's spawn point cleared for its owner
   WardAccess.cs           Ward access answered on the server
   AchievementGate.cs      Achievements on a Server Authority server
+  ThrownSpears.cs         A thrown spear still flying when vanilla would delete it lands as an item
   RpcTakeover.cs          Replaces a vanilla RPC handler on the server
   NearestWater.cs         Debug: nearest sailable water
   SpawnRequests.cs        Debug: the spawn request file

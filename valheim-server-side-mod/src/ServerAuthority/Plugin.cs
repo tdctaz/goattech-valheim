@@ -121,6 +121,7 @@ namespace ServerAuthority
             Pheromones.Reset();
             WardAccess.Reset();
             CatapultLoad.Reset();
+            ThrownSpears.Reset();
             CreatureSenses.Reset();
             PetFaces.Reset();
             RemotePush.Reset();
