@@ -60,6 +60,9 @@ dedicated server and on every client, all at the same version. Valheim Server To
   or late loot can be traced in the logs
 - Fixed: a character holding an item refined at the Forge of Potential had every save refused, or
   was kicked, because the item was above its normal maximum quality
+- Fixed: a thrown spear that hit nothing was deleted after 10 seconds in the air, or as soon as it
+  flew out of the area loaded around its thrower. It now drops as an item where it was, so it can
+  be found
 
 ### Rebalanced
 
