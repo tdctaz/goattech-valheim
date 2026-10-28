@@ -455,6 +455,7 @@ when it acts.
 | An archery target's hit has a local player to message | Server-owned shots threw and passed through the target | `ArcheryTargetPatches.cs` |
 | Ghost mode, debug flying and cinematics are local | Server creatures hunted admins in ghost mode and players watching a boss dream | `PlayerFlags.cs`, `CreatureSenses.cs` |
 | Summon limit and pet rock react to the owner's player | The "max summons" message was lost; the pet rock ignored everyone | `SummonCapPatches.cs`, `PetFaces.cs` |
+| A drop's owner knows its current count | A player who held drops they could not carry merged them, and the server took them back and merged them again from counts it read when they appeared: 124 of 200 black marble were lost in one test | `ItemStacks.cs` |
 
 To find more after a game update, look in owner-run code and owner-targeted or `Everybody` RPCs for
 unguarded `Player.m_localPlayer`, for writes to `Game.instance.GetPlayerProfile()` or other `Game`
@@ -523,7 +524,7 @@ or replaces against a fresh decompilation: the merge in `ZDOMan.RPC_ZDOData` and
 `CookingStation.RPC_RemoveDoneItem` and `SpawnItem`, the per-slot record of who put the item in (`RPC_AddItem`, `SetSlot`), the stat counting in `TreeBase`, `TreeLog`,
 `MineRock`, `MineRock5`, `Character.RPC_Damage` and `Tameable.Tame`, `BaseAI.FindEnemy`,
 `ArcheryTarget.OnProjectileHit`, the flight time in `Projectile.FixedUpdate` and `SpawnOnHit` that
-`ThrownSpears` mirrors, the removal in `ZNetScene.RemoveObjects`, `Tameable.UnsummonMaxInstances`, `Pet`, and the RPC replacements
+`ThrownSpears` mirrors, the counts `ItemDrop.AutoStackItems` and `RemoveOne` read for `ItemStacks`, the removal in `ZNetScene.RemoveObjects`, `Tameable.UnsummonMaxInstances`, `Pet`, and the RPC replacements
 `Pickable.RPC_Pick` and `Trap.RPC_OnStateChanged`. `RESEARCH.md` records
 how Valheim distributes authority and what earlier game versions changed.
 
@@ -597,6 +598,7 @@ src/ServerAuthority/
   WardAccess.cs           Ward access answered on the server
   AchievementGate.cs      Achievements on a Server Authority server
   ThrownSpears.cs         A thrown spear still flying when vanilla would delete it lands as an item
+  ItemStacks.cs           Reloads a drop's count before it is merged or eaten from
   RpcTakeover.cs          Replaces a vanilla RPC handler on the server
   NearestWater.cs         Debug: nearest sailable water
   SpawnRequests.cs        Debug: the spawn request file
