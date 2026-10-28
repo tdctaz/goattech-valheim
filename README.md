@@ -67,6 +67,9 @@ dedicated server and on every client, all at the same version. Valheim Server To
 - Built for Valheim 1.0.21. With 0.9.10 on 1.0.21, nothing could be taken out of a cooking station
 - Items from the Frost Foundry name the player who put the materials in as their crafter, as
   Valheim 1.0.21 does, rather than the player who took them out
+- Fixed: dropped items could vanish, or be duplicated, after a player stood among drops they could
+  not carry, as when clearing a demolished build while overweight. The server merged nearby stacks
+  from out of date counts; in one test 124 of 200 black marble were lost
 
 ### Rebalanced
 
