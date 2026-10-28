@@ -167,35 +167,23 @@ namespace ValheimCreatures
             return !character.IsTamed() && character.GetBaseAI() is AnimalAI;
         }
 
-        internal static Character Prefer(BaseAI ai, Character found)
+        internal static void Picked(BaseAI ai, Character found)
         {
             Character seeker = ai.m_character;
             if (found == null || found.IsPlayer() || Known.Count == 0 || seeker == null || seeker.IsTamed() ||
-                !Known.TryGetValue(seeker, out Raider raider))
+                !Known.TryGetValue(seeker, out Raider raider) || raider.LastMonster == found)
             {
-                return found;
+                return;
             }
 
-            float priority = ConfigSync.Current.RaidPlayerPriority;
+            raider.LastMonster = found;
             Vector3 position = ai.transform.position;
             float distance = Vector3.Distance(found.transform.position, position);
             Player player = ClosestPlayer(position, out float playerDistance);
-            if (player != null && priority > 0f && playerDistance < distance * priority)
-            {
-                return player;
-            }
-
-            if (raider.LastMonster != found)
-            {
-                raider.LastMonster = found;
-                string rather = player != null
-                    ? $"rather than {player.GetPlayerName()} {playerDistance:0} m away"
-                    : $"with no player within {HuntRange:0} m";
-                Plugin.Log.LogInfo(
-                    $"Raider {Name(seeker)} goes for {Name(found)}, {distance:0} m away, {rather}.");
-            }
-
-            return found;
+            string nearest = player != null
+                ? $"with {player.GetPlayerName()} {playerDistance:0} m away"
+                : $"with no player within {HuntRange:0} m";
+            Plugin.Log.LogInfo($"Raider {Name(seeker)} goes for {Name(found)}, {distance:0} m away, {nearest}.");
         }
 
         private static Player ClosestPlayer(Vector3 position, out float distance)

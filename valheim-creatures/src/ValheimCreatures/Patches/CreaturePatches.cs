@@ -149,9 +149,9 @@ namespace ValheimCreatures.Patches
             Raiders.BeginTargeting();
         }
 
-        private static void Postfix(BaseAI __instance, ref Character __result)
+        private static void Postfix(BaseAI __instance, Character __result)
         {
-            __result = Raiders.Prefer(__instance, __result);
+            Raiders.Picked(__instance, __result);
         }
 
         private static void Finalizer()

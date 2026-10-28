@@ -103,11 +103,11 @@ On a dedicated server raids come in waves instead of running for a fixed time:
   is in the area. At most two waves of a raid are alive at once; a wave that is due waits for one to
   be defeated.
 - Raiders never go after creatures that only ever flee: Deer, Hare, Chicken, piglets, calves, cubs,
-  seals and the gem-carrying goblin. Every other monster is fair game, but players come first: a
-  raider picks a monster or tamed creature over the nearest player within 200 m only when it is
-  three times closer than that player. Raiders never go after each other. Wild creatures are
-  vanilla and may go after raiders, and hits land both ways as in vanilla, so a raider that is
-  attacked takes the damage and can fight back.
+  seals and the gem-carrying goblin, and never after each other. Otherwise they pick targets as in
+  vanilla, the nearest enemy they sense, so a monster or tamed creature closer than a player is
+  fought first. Wild creatures are vanilla and may go after raiders, and hits land both ways as in
+  vanilla, so a raider that is attacked takes the damage and can fight back. The server logs each
+  new monster a raider goes for and how far away the nearest player was.
 - A raider with nothing to fight drifts toward the raid's centre. One that strays more than 60 m from
   the centre, with no player within 30 m and no player target within 60 m, walks back for 30 seconds
   ignoring everything else, until it is within 30 m or a player comes close. One that strays again
@@ -277,7 +277,6 @@ once. Creatures already in the world keep their stars and color.
 | `Raids.ReturnDistance` | `60` | Meters from the raid's centre at which a raider has strayed. |
 | `Raids.ReturnSeconds` | `30` | How long a straying raider walks back; 0 turns it off. |
 | `Raids.ReturnTries` | `3` | Trips back before a raider that keeps straying leaves the raid. |
-| `Raids.PlayerPriority` | `3` | How many times closer than the nearest player a monster must be for a raider to pick it; 0 is vanilla's nearest first. |
 | `Difficulty.DamagePerPlayer` | `0` | Extra creature damage per nearby player beyond the first. 0.04 is vanilla. |
 | `Looks.ScalePerStar` | `0.05` | Size added per star past two. |
 | `Looks.SaturationPerStar` | `0.1` | |

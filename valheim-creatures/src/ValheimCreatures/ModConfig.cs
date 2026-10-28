@@ -74,7 +74,6 @@ namespace ValheimCreatures
         internal static ConfigEntry<float> RaidReturnDistance;
         internal static ConfigEntry<float> RaidReturnSeconds;
         internal static ConfigEntry<int> RaidReturnTries;
-        internal static ConfigEntry<float> RaidPlayerPriority;
 
         internal static ConfigEntry<float> DamagePerPlayer;
 
@@ -269,13 +268,6 @@ namespace ValheimCreatures
                     "A raider that wanders off again after this many trips back, without 90 seconds of calm in between, " +
                     "leaves the raid and stays as an ordinary monster.",
                     new AcceptableValueRange<int>(1, 10)));
-            RaidPlayerPriority = config.Bind("Raids", "PlayerPriority", 3f,
-                new ConfigDescription(
-                    "A raider goes for a monster or tamed creature rather than the nearest player within 200 m only " +
-                    "when it is this many times closer than that player. Raiders never go after each other or after " +
-                    "creatures that only ever flee, such as deer and hares. 0 turns the priority off, so a raider " +
-                    "goes for whatever it senses nearest, as in vanilla.",
-                    new AcceptableValueRange<float>(0f, 10f)));
 
             DamagePerPlayer = config.Bind("Difficulty", "DamagePerPlayer", 0f,
                 new ConfigDescription(
