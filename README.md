@@ -9,6 +9,7 @@ dedicated server and on every client, all at the same version. Valheim Server To
 | [valheim-rebalanced](valheim-rebalanced/README.md) | Rebalanced: weapon, armor and staff balance |
 | [valheim-creatures](valheim-creatures/README.md) | Creatures: more stars, colored traits, boss traits, raids in waves |
 | [valheim-server-tool](valheim-server-tool/README.md) | Valheim Server Tool: runs, restarts, backs up and updates the server |
+| [valheim-danish](valheim-danish/README.md) | Danish: fills in and corrects the Danish translation, not yet in the release |
 | `release/` | Packaging and the player and server install guides |
 
 ## Goals
