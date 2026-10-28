@@ -35,11 +35,13 @@ namespace ServerAuthority
                 }
 
                 Collector collector = Identify(sender);
+                long adder = station.m_recordCrafter ? station.m_nview.GetZDO().GetLong(ZDOVars.s_playerID + i, 0L) : 0L;
+                Collector crafter = adder != 0L ? Identify(adder) : collector;
                 try
                 {
                     for (int j = 0; j < amount; j++)
                     {
-                        SpawnItem(station, itemName, i, userPoint, cheated, collector);
+                        SpawnItem(station, itemName, i, userPoint, cheated, collector, crafter);
                     }
                 }
                 finally
@@ -48,7 +50,7 @@ namespace ServerAuthority
                     station.m_nview.InvokeRPC(ZNetView.Everybody, "RPC_SetSlotVisual", i, "");
                 }
 
-                Report(station, itemName, amount, collector);
+                Report(station, itemName, amount, collector, crafter, adder);
                 return;
             }
         }
@@ -74,7 +76,7 @@ namespace ServerAuthority
         }
 
         private static void SpawnItem(CookingStation station, string name, int slot, Vector3 userPoint, bool cheated,
-            Collector collector)
+            Collector collector, Collector crafter)
         {
             GameObject prefab = ObjectDB.instance.GetItemPrefab(name);
             Vector3 position;
@@ -103,10 +105,10 @@ namespace ServerAuthority
                 item.m_itemData.m_durability = item.m_itemData.m_shared.m_maxDurability;
             }
 
-            if (station.m_recordCrafter && collector != null && collector.PlayerId != 0L)
+            if (station.m_recordCrafter && crafter != null && crafter.PlayerId != 0L)
             {
-                item.m_itemData.m_crafterID = collector.PlayerId;
-                item.m_itemData.m_crafterName = collector.Name;
+                item.m_itemData.m_crafterID = crafter.PlayerId;
+                item.m_itemData.m_crafterName = crafter.Name;
             }
 
             spawned.GetComponent<Rigidbody>().linearVelocity = direction * station.m_spawnForce;
@@ -117,36 +119,62 @@ namespace ServerAuthority
             }
         }
 
-        private static void Report(CookingStation station, string itemName, int amount, Collector collector)
+        private static void Report(CookingStation station, string itemName, int amount, Collector collector, Collector crafter,
+            long adder)
         {
             string stationName = Utils.GetPrefabName(station.gameObject);
+            string gave = collector != null
+                ? $"{stationName} gave {amount} x {itemName} to {collector.Name}"
+                : $"{stationName} gave {amount} x {itemName} to a sender with no connected peer, so no craft stat was recorded";
+            if (!station.m_recordCrafter)
+            {
+                if (collector == null)
+                {
+                    Plugin.Log.LogWarning($"{gave}.");
+                }
+
+                return;
+            }
+
+            string who = adder != 0L ? "who put it in" : "who collected it, as nobody was recorded putting it in";
+            if (crafter == null && adder != 0L && collector != null)
+            {
+                Plugin.Log.LogInfo($"{gave}. Peer {adder}, who put it in, is no longer connected, so no crafter was recorded.");
+                return;
+            }
+
+            if (crafter == null)
+            {
+                string missing = adder != 0L
+                    ? $"Peer {adder}, who put it in, is no longer connected"
+                    : "Nobody was recorded putting it in";
+                Plugin.Log.LogWarning($"{gave}. {missing}, so no crafter was recorded.");
+                return;
+            }
+
+            if (!crafter.HasCharacter)
+            {
+                Plugin.Log.LogWarning(
+                    $"{gave}. The character ZDO {crafter.CharacterId} of {crafter.Name}, {who}, was not found, " +
+                    "so no crafter was recorded.");
+                return;
+            }
+
+            if (crafter.PlayerId == 0L)
+            {
+                Plugin.Log.LogWarning(
+                    $"{gave}. The character ZDO {crafter.CharacterId} of {crafter.Name}, {who}, has no player id, " +
+                    "so no crafter was recorded.");
+                return;
+            }
+
             if (collector == null)
             {
-                Plugin.Log.LogWarning(
-                    $"{stationName} gave {amount} x {itemName} to a sender with no connected peer, so no craft stat or crafter was recorded.");
+                Plugin.Log.LogWarning($"{gave}. Crafted by {crafter.Name}, {who}.");
                 return;
             }
 
-            if (station.m_recordCrafter && !collector.HasCharacter)
-            {
-                Plugin.Log.LogWarning(
-                    $"{stationName} gave {amount} x {itemName} to {collector.Name}, whose character ZDO {collector.CharacterId} " +
-                    "was not found, so no crafter was recorded.");
-                return;
-            }
-
-            if (station.m_recordCrafter && collector.PlayerId == 0L)
-            {
-                Plugin.Log.LogWarning(
-                    $"{stationName} gave {amount} x {itemName} to {collector.Name}, whose character ZDO {collector.CharacterId} " +
-                    "has no player id, so no crafter was recorded.");
-                return;
-            }
-
-            if (station.m_recordCrafter)
-            {
-                Plugin.Log.LogInfo($"{stationName} gave {amount} x {itemName} to {collector.Name}.");
-            }
+            Plugin.Log.LogInfo($"{gave}, crafted by {crafter.Name}, {who}.");
         }
     }
 }

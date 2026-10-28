@@ -457,3 +457,62 @@ What moved, and what it meant for the mods:
   allows, the amount.
 - Network version 41, world version 42, player profile version 47. 1.0.17 clients cannot join, and a
   world saved by 1.0.20 does not load in 1.0.17.
+
+
+## 11. Re-verification against Valheim 1.0.21
+
+Diffing the publicized 1.0.20 and 1.0.21 client assemblies changes 34 files and one in
+`assembly_utils`, about 480 lines once the decompiler's IL offset comments are dropped. No type is
+added or removed. The dedicated server's assembly carries the same changes, and its 30 FPS target in
+`RequestTargetFrameRateFromPreset` and the reference position pinned in `Game` are unchanged.
+`PatchCheck` resolves every target for all four mods against both. Network version 41 and every
+save format version are unchanged, so nothing `ProfileCodec` reads or `FreshCharacter` writes moved.
+Most of the update is null guards and fixes to menus, gamepad and touch input and the save lists.
+
+What moved, and what it meant for the mods:
+
+- `CookingStation` records who put each item in. `SetSlot` takes a sender, `RPC_AddItem` passes its
+  RPC sender, the peer's uid, and `SetSlot` keeps it in the station's ZDO under
+  `ZDOVars.s_playerID + slot`. Nothing clears it; the next item put in that slot overwrites it.
+  `SpawnItem` names as crafter the connected player whose character's `ZDOID.UserID` matches, nobody
+  if that player has left, and `Player.m_localPlayer` only for a slot with nothing recorded. Before,
+  the crafter was whoever owned the station. `CookingCollect` named the collector, and now follows
+  vanilla: it looks the slot's peer up as it already looked up the collector, so the crafter id is
+  still the persistent player id where vanilla now stores the peer's uid. An item queued before
+  1.0.21 has nothing recorded and names its collector. The craft stat stays with the collector.
+  `RPC_AddItem` is not replaced, so vanilla's runs on the server and keeps the record.
+- The 0.9.10 release cannot collect from a cooking station on 1.0.21. C# writes a default argument
+  into the call site, so `CookingCollect`, built against 1.0.20, calls the five argument `SetSlot`,
+  which 1.0.21 no longer has. Every other reference the three released mods make into the game still
+  resolves. A probe plugin built the same way and run on the 1.0.21 server confirmed what Mono does
+  with it: it refuses to compile the whole method, so the `MissingMethodException` comes before the
+  method's first line. On 0.9.10 a collect would spawn nothing and leave the finished item in its
+  slot, without duplicating it. Rebuilt against 1.0.21 the call resolves.
+- `Ship.UpdateSail` and `UpdateSailSize` take whether a player is steering, and `UpdateSailSize`
+  reads `Player.m_localPlayer` only then. On the server a sail moves because someone is steering, so
+  the read still throws there and `HeadlessPatches` still skips the method; its prefix takes no
+  arguments. `CustomFixedUpdate` passes the flag, and the five patches on it are prefixes and
+  postfixes.
+- `WearNTear.UpdateSupport` caches the `WearNTear` behind each support collider, stops checking at
+  the first support whose value changed, and keeps its cached support when the best support equals
+  it, where before it had to exceed it. The server recalculates support less often.
+  `HeadlessPatches` only fills `m_bounds` first, which is unaffected.
+- `GrapplingPoint.Pull` acts only on the grapple's owner. `GrapplingPoint` and
+  `GrapplingPointSecondary` are not persistent, so the ownership policy never claims them and the
+  shooter's client keeps its own grapple.
+- `Character.ApplySlippery` and `UpdateWalking` test the ground's layer as a bit of
+  `s_slipperyStuffMask`, where they used to AND in the layer number. Creatures the server simulates
+  now slip where vanilla means them to.
+- `PlayerProfile.GetStat` takes the difficulty whose stats to read, and the record stats such as
+  maximum comfort compare against the all difficulties bucket. No mod reads stats.
+- Item and armor stands clear `m_equipped` before saving an item, and the soft death status effect
+  follows the hard death cooldown. Both run on the player's own client.
+
+The data the mods depend on still matches in the 1.0.21 server bundles: the staffs, root armor, tower
+shields and burnt wood conversion Rebalanced changes carry the vanilla values its README quotes, and
+every boss, faction, raid and raid spawn Creatures names exists. The bundles were replaced, so this
+compares 1.0.21 with what the mods expect rather than with 1.0.20. One Creatures README row does not
+hold: the Queen's raid, `army_seekers`, has its `SeekerBrute` entry disabled, so a Queen wave is a
+seeker and a brood. The startup raid summary lists disabled entries too, so earlier logs cannot show
+whether 1.0.20 had it enabled. The Danish mod's 13 localization tables hold the same 6050 strings,
+and none of the 1459 rows it fills changed its English or gained a vanilla translation.

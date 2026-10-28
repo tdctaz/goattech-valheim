@@ -107,7 +107,7 @@ in `BepInEx/plugins/` on both. Older packs shipped a `start_server_bepinex.sh` t
 variables for a Doorstop 4 library, and the server starts with no BepInEx at all.
 
 The server log should say `Server Authority active. Ownership mode: Always.` The mod warns at startup
-when the game version differs from the one it was verified against (1.0.20).
+when the game version differs from the one it was verified against (1.0.21).
 
 ## Configuration
 
@@ -520,7 +520,7 @@ or replaces against a fresh decompilation: the merge in `ZDOMan.RPC_ZDOData` and
 `SpawnSystem.UpdateSpawning`, `RandEventSystem.FixedUpdate`, `Player.Save` (the player data layout
 `ProfileCodec` reads and `FreshCharacter` writes), the cheat flag `Character.OnDeath` reads for `KillCredit`,
 `EnvMan.UpdateEnvironment` and `GetBiome`,
-`CookingStation.RPC_RemoveDoneItem` and `SpawnItem`, the stat counting in `TreeBase`, `TreeLog`,
+`CookingStation.RPC_RemoveDoneItem` and `SpawnItem`, the per-slot record of who put the item in (`RPC_AddItem`, `SetSlot`), the stat counting in `TreeBase`, `TreeLog`,
 `MineRock`, `MineRock5`, `Character.RPC_Damage` and `Tameable.Tame`, `BaseAI.FindEnemy`,
 `ArcheryTarget.OnProjectileHit`, the flight time in `Projectile.FixedUpdate` and `SpawnOnHit` that
 `ThrownSpears` mirrors, the removal in `ZNetScene.RemoveObjects`, `Tameable.UnsummonMaxInstances`, `Pet`, and the RPC replacements
