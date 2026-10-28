@@ -64,6 +64,9 @@ dedicated server and on every client, all at the same version. Valheim Server To
 - Fixed: a thrown spear that hit nothing was deleted after 10 seconds in the air, or as soon as it
   flew out of the area loaded around its thrower. It now drops as an item where it was, so it can
   be found
+- Built for Valheim 1.0.21. With 0.9.10 on 1.0.21, nothing could be taken out of a cooking station
+- Items from the Frost Foundry name the player who put the materials in as their crafter, as
+  Valheim 1.0.21 does, rather than the player who took them out
 
 ### Rebalanced
 
