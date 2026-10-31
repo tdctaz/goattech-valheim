@@ -121,6 +121,7 @@ are configured on the server only. Settings marked *debug* exist only in a
 | `General.RequireDedicatedServer` | `true` | Only activate on a dedicated server. |
 | `Ownership.Mode` | `Always` | `Vanilla` leaves ownership alone, to isolate whether a problem is this mod. |
 | `Ownership.KeepStaticObjectsOwned` | `true` | Building pieces, trees, small rocks and terrain edits stay server owned instead of being released when players move on, so a step across a zone border does not re-send a whole base. |
+| `Ownership.HoldSupportUntilNeighboursLoad` | `true` | Check a building piece's support only once the zones around it have loaded. See [Structural support](#structural-support). Leave on. |
 | `Ownership.ServerOwnsWaterborne` | `true` | Let the server own boats and floating objects. Off gives an unmanned hull to the nearest client, as vanilla. |
 | `Performance.MaxObjectsCreatedPerFrame` | `100` | Lower if the server stutters, raise if players outrun object loading. |
 | `Performance.ZoneEvictionsPerTick` | `0` | Expired zones unloaded per 0.1s tick. `0` is one per player; vanilla is one. |
@@ -352,6 +353,49 @@ Ownership over 600s: 312 change(s). Released outside players' active areas becau
 their own: piece_chest (Container), fire_pit (Fireplace), wood_door (Rigidbody).
 ```
 
+### Structural support
+
+The owner of a building piece checks its support about once a second, less often in a very large
+base, but only inside a player's active area: the inner three by three zones at the default
+simulation distance. The zones one ring further out are loaded too, so every piece that is checked
+has its neighbours on both sides of a zone border. Most pieces also wait 30 seconds after they are
+loaded before their first check.
+
+That margin only exists once the outer ring has finished loading. When a player crosses a zone
+border, the active area moves in that frame. The pieces in the zone that has just come within
+checking range were loaded long ago, so they are checked straight away, while the zones beyond them
+are built one at a time, a tenth of a second apart, and their objects created after that. A piece
+resting on something across that border found nothing there, lost its support and fell, and
+everything it held fell with it. Vanilla rarely shows this, because a client only gets those pieces
+at the server's next ownership pass, up to two seconds later, and until then they read as fully
+supported. With `KeepStaticObjectsOwned` the server already owns them.
+
+`HoldSupportUntilNeighboursLoad` keeps track of each zone near a player. A zone counts as loaded once
+it is built and none of its objects are still waiting to be created, and stays loaded until it
+leaves every player's near area. A piece is checked only when every zone around its own that lies in
+some player's near area has been loaded for two seconds. Until then the check is skipped and the
+piece keeps the support it had, so wear and weather go on as usual. A structure knocked down next to
+a zone that is still loading therefore falls a few seconds late.
+
+Zones outside every near area are left out. The server does not create their objects, apart from
+the few large ones meant to be seen from afar, and the active area keeps checked pieces at least
+24 m from them at every simulation distance. If a zone's objects are still not all created 30
+seconds after it was built, the zone counts as loaded anyway, with a warning naming them. A zone
+that is still not built, or still loading a location, after 30 seconds is warned about too, but
+checks next to it stay held, since nothing in it exists yet to rest on.
+
+The performance report adds a line when anything fell or was held back:
+
+```
+Structural support over 600s: 41 piece(s) fell for lack of support, 38 in zone (42, 98) at (2688,
+6272), 3 in zone (43, 98) at (2752, 6272): 20 wood_beam, 12 wood_floor, 9 wood_pole2. Support checks
+held back 312 time(s) while 9 zone(s) finished loading, longest load 2.4 s, 0 zone(s) given up on.
+```
+
+Knocking out the bottom of a structure to bring it down shows up here like any other loss of
+support. A collapse that nobody caused, in a zone a player had just come near, would point back at
+this.
+
 ### Reading the network report
 
 ```
@@ -455,6 +499,7 @@ when it acts.
 | An archery target's hit has a local player to message | Server-owned shots threw and passed through the target | `ArcheryTargetPatches.cs` |
 | Ghost mode, debug flying and cinematics are local | Server creatures hunted admins in ghost mode and players watching a boss dream | `PlayerFlags.cs`, `CreatureSenses.cs` |
 | Summon limit and pet rock react to the owner's player | The "max summons" message was lost; the pet rock ignored everyone | `SummonCapPatches.cs`, `PetFaces.cs` |
+| The pieces a client starts checking reach it at the next ownership pass, after the zones beyond them have loaded | With pieces kept server owned, a piece came within checking range the moment a player crossed a zone border, while the zone beyond was still loading, and anything resting across that border fell | `SupportGate.cs` holds the check until the zones around the piece have loaded |
 | A drop's owner knows its current count | A player who held drops they could not carry merged them, and the server took them back and merged them again from counts it read when they appeared: 124 of 200 black marble were lost in one test | `ItemStacks.cs` |
 
 To find more after a game update, look in owner-run code and owner-targeted or `Everybody` RPCs for
@@ -524,7 +569,7 @@ or replaces against a fresh decompilation: the merge in `ZDOMan.RPC_ZDOData` and
 `CookingStation.RPC_RemoveDoneItem` and `SpawnItem`, the per-slot record of who put the item in (`RPC_AddItem`, `SetSlot`), the stat counting in `TreeBase`, `TreeLog`,
 `MineRock`, `MineRock5`, `Character.RPC_Damage` and `Tameable.Tame`, `BaseAI.FindEnemy`,
 `ArcheryTarget.OnProjectileHit`, the flight time in `Projectile.FixedUpdate` and `SpawnOnHit` that
-`ThrownSpears` mirrors, the counts `ItemDrop.AutoStackItems` and `RemoveOne` read for `ItemStacks`, the removal in `ZNetScene.RemoveObjects`, `Tameable.UnsummonMaxInstances`, `Pet`, and the RPC replacements
+`ThrownSpears` mirrors, the counts `ItemDrop.AutoStackItems` and `RemoveOne` read for `ItemStacks`, the removal in `ZNetScene.RemoveObjects`, the active area test in `ZNetScene.PointInsideActiveArea` and `WearNTear.UpdateWear` and `UpdateSupport`, which `SupportGate` relies on, `Tameable.UnsummonMaxInstances`, `Pet`, and the RPC replacements
 `Pickable.RPC_Pick` and `Trap.RPC_OnStateChanged`. `RESEARCH.md` records
 how Valheim distributes authority and what earlier game versions changed.
 
@@ -599,6 +644,7 @@ src/ServerAuthority/
   AchievementGate.cs      Achievements on a Server Authority server
   ThrownSpears.cs         A thrown spear still flying when vanilla would delete it lands as an item
   ItemStacks.cs           Reloads a drop's count before it is merged or eaten from
+  SupportGate.cs          Holds support checks until the zones around a piece have loaded
   RpcTakeover.cs          Replaces a vanilla RPC handler on the server
   NearestWater.cs         Debug: nearest sailable water
   SpawnRequests.cs        Debug: the spawn request file

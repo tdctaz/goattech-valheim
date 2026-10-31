@@ -101,6 +101,12 @@ namespace ServerAuthority
                     Plugin.Log.LogInfo(ownership);
                 }
 
+                string support = SupportGate.ClosePeriod(reportLength);
+                if (support != null)
+                {
+                    Plugin.Log.LogInfo(support);
+                }
+
                 string deaths = DeathTiming.ClosePeriod(reportLength);
                 if (deaths != null)
                 {

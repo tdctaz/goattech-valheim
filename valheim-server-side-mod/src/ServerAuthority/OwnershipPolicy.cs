@@ -37,6 +37,7 @@ namespace ServerAuthority
 #endif
             Waterborne.Reset();
             StaticObjects.Reset();
+            SupportGate.Reset();
             _clock = 0.0;
             _lastStatus = 0.0;
             _periodTransfers = 0;

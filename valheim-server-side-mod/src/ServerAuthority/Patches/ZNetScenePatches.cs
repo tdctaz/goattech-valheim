@@ -71,6 +71,7 @@ namespace ServerAuthority.Patches
             // With nobody online both lists are empty, which tears the whole scene down and leaves
             // the server idle. That is the intended behaviour, not an edge case.
             CreateObjects(__instance, anchors);
+            SupportGate.Track(anchors, synced, SortBuffer);
             RemoveObjects(__instance);
             return false;
         }

@@ -53,6 +53,7 @@ namespace ServerAuthority
         internal static ConfigEntry<float> ShipWakeSink;
         internal static ConfigEntry<bool> ServerOwnsWaterborne;
         internal static ConfigEntry<bool> KeepStaticObjectsOwned;
+        internal static ConfigEntry<bool> HoldSupportUntilNeighboursLoad;
 
         internal static ConfigEntry<bool> ModValidationEnabled;
         internal static ConfigEntry<string> ServerOnlyMods;
@@ -407,6 +408,14 @@ namespace ServerAuthority
                 "does not change. A kept piece outside every player's active area is still not worn or " +
                 "checked for support, but it now takes damage when something hits it, where an unowned one " +
                 "ignored the hit.");
+
+            HoldSupportUntilNeighboursLoad = config.Bind("Ownership", "HoldSupportUntilNeighboursLoad", true,
+                "Check a building piece's support only once every zone around it has been built and all of " +
+                "its objects created, and two seconds have passed since.\nWhen a player crosses a zone " +
+                "border, the pieces in the zone that has just come within checking range were loaded long " +
+                "ago and are checked at once, while the zones beyond them are still loading. A piece " +
+                "resting on something across that border found nothing there, lost its support and fell, " +
+                "taking everything it held with it. Turn this off only to reproduce that fault.");
 
             ServerOwnsWaterborne = config.Bind("Ownership", "ServerOwnsWaterborne", true,
                 "Let the server own boats and other floating objects, so that a drifting boat or a " +

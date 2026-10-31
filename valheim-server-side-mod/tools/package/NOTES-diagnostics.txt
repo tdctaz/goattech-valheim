@@ -42,6 +42,14 @@ KeepStaticObjectsOwned
     performance report's "Ownership" line counts owner changes and names
     the prefabs still released because they act on their own.
 
+HoldSupportUntilNeighboursLoad
+    Leave true. A building piece's support is checked only once every zone
+    around it has loaded. Without it, crossing a zone border could drop a
+    structure resting on something in the zone beyond, because that zone
+    was still loading when the piece was checked. The performance report's
+    "Structural support" line counts the pieces that fell for lack of
+    support, by zone and by piece, and how often checks were held back.
+
 ServerOwnsWaterborne
     Lets the server own boats and floating objects. Leave true: every
     passenger then gets the same hull physics whoever is steering.
