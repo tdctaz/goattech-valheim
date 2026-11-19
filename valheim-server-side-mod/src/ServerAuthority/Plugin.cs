@@ -132,6 +132,7 @@ namespace ServerAuthority
             PrefabKinds.Reset();
             DeathTimingClient.Reset(__instance);
             CreationPriority.Reset(__instance);
+            CreaturePriority.Reset(__instance);
             KillCredit.Register();
             StatCredit.Register();
             PlayerLaunch.Register();
@@ -168,6 +169,7 @@ namespace ServerAuthority
             ServerPerformance.Reset();
             DeathTimingClient.Reset(null);
             CreationPriority.Reset(null);
+            CreaturePriority.Reset(null);
             PrefabKinds.Reset();
             AchievementGate.Reset();
             PityCounters.Reset();

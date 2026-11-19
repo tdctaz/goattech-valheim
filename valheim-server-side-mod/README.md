@@ -135,6 +135,7 @@ are configured on the server only. Settings marked *debug* exist only in a
 | `Performance.SteamSendRateKiB` | `384` | Steam's send rate per player. `0` keeps vanilla's 150. Needs upload for every player at once. |
 | `Performance.ClearTeleportGhosts` | `true` | Fixes players seeing a frozen copy of someone at a portal they used. |
 | `Performance.CreateFreshDropsFirst` | `true` | Client side. Ragdolls and fresh loot near the player are created ahead of the queue of objects waiting to load. |
+| `Performance.CreateCreaturesFirst` | `true` | Client side. Creatures, other players and projectiles within 64 m are created ahead of waiting buildings, so nothing the server is already running stays invisible. |
 | `Vehicles.KeepShipOwnedByDriver` | `false` | Fallback only: hands a steered boat to its driver. |
 | `Vehicles.KeepVehiclesOwnedByUser` | `true` | Leases mounts and carts to their user. Leave on. |
 | `Vehicles.HoldHullsUntilWaterLoads` | `true` | Holds a server-owned hull still until the zones under it exist. Leave on. |
@@ -380,6 +381,19 @@ waits until its own zone is built and while a building piece, ship or rock withi
 the terrain it rests on, is still queued, so a ragdoll does not land before its floor. It is
 dropped if the player moves more than 48 m away or it is still waiting after ten seconds, and
 vanilla then creates it in its usual turn.
+
+Creatures waited in the same queue, and that cost more than a late ragdoll. Every building piece,
+tree and rock is `Solid`, a player `Prioritized`, and every creature and projectile `Default`, the
+lowest type, so after a respawn or a zone border at a large base a creature next to the player
+stayed invisible for seconds. In vanilla nobody simulates a
+creature that no client has created, but here the server runs its AI at once, so it closed in
+unseen and its arrows flew unseen. `CreateCreaturesFirst` creates characters, other players
+included, and projectiles within 64 m, nearest first and ten per 1/30 s, while a `Solid` or terrain
+object is still queued or the area around the player is not yet built. It moves forward only objects
+another machine owns: a client draws those without gravity at the position their owner sends, so
+they need no floor yet. Anything this client owns, such as a mount it rides, waits its usual turn.
+Vanilla ignores a hit on the player whose attacker this client has not created, so an attacker
+only hurts the player once it exists on their screen.
 
 Every change of an object's owner bumps its owner revision, and the server then sends the whole
 object again to every player who has it. The policy released everything outside the players'
@@ -687,6 +701,7 @@ src/ServerAuthority/
   ItemStacks.cs           Reloads a drop's count before it is merged or eaten from
   SupportGate.cs          Holds support checks until the zones around a piece have loaded
   PityCounters.cs         Saves the server's drop pity counters with the world
+  CreaturePriority.cs     Clients create nearby creatures and projectiles before waiting buildings
   RpcTakeover.cs          Replaces a vanilla RPC handler on the server
   NearestWater.cs         Debug: nearest sailable water
   SpawnRequests.cs        Debug: the spawn request file

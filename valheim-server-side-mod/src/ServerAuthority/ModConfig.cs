@@ -17,6 +17,7 @@ namespace ServerAuthority
         internal static ConfigEntry<bool> FollowLivePlayerPosition;
         internal static ConfigEntry<bool> ClearTeleportGhosts;
         internal static ConfigEntry<bool> CreateFreshDropsFirst;
+        internal static ConfigEntry<bool> CreateCreaturesFirst;
         internal static ConfigEntry<int> ZdoSendWindowMaxKiB;
         internal static ConfigEntry<int> SteamSendRateKiB;
 
@@ -175,6 +176,16 @@ namespace ServerAuthority
                 "loot seconds late. One is held back until its own zone is built and while a building " +
                 "piece, ship or rock within 16m of it, or the terrain it rests on, is still waiting, so a " +
                 "ragdoll never lands before the floor under it exists.");
+
+            CreateCreaturesFirst = config.Bind("Performance", "CreateCreaturesFirst", true,
+                "On a client, create creatures, other players and projectiles within 64m ahead of the " +
+                "building pieces, trees and rocks waiting to be created.\nVanilla creates every one of " +
+                "those, however far away, before any creature, so after a respawn or a zone border at a " +
+                "large base a creature next to the player stayed invisible for seconds. In vanilla " +
+                "nothing simulated it meanwhile, but here the server runs its AI at once, so it closes " +
+                "in while invisible and its projectiles fly unseen. Only objects another machine owns " +
+                "are moved forward: those " +
+                "have no gravity here and follow the owner's position, so they need no floor yet.");
 
             KeepShipOwnedByDriver = config.Bind("Vehicles", "KeepShipOwnedByDriver", false,
                 "Hand a crewed ship back to whoever is at the rudder, instead of the server " +

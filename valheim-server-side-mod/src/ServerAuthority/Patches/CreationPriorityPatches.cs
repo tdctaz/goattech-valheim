@@ -45,4 +45,25 @@ namespace ServerAuthority.Patches
             }
         }
     }
+
+    [HarmonyPatch(typeof(ZNetScene), nameof(ZNetScene.CreateObjectsSorted))]
+    internal static class ZNetScene_CreateObjectsSorted_CreaturePriority_Patch
+    {
+        private static void Prefix(ZNetScene __instance, List<ZDO> currentNearObjects)
+        {
+            if (!CreaturePriority.Active)
+            {
+                return;
+            }
+
+            try
+            {
+                CreaturePriority.CreateNearby(__instance, currentNearObjects);
+            }
+            catch (Exception e)
+            {
+                CreaturePriority.Fail(e);
+            }
+        }
+    }
 }

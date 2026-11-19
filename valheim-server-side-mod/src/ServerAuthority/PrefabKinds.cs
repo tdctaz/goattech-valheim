@@ -10,11 +10,25 @@ namespace ServerAuthority
 
         private static HashSet<int> _ragdolls;
         private static HashSet<int> _items;
+        private static HashSet<int> _characters;
+        private static HashSet<int> _projectiles;
 
         internal static void Reset()
         {
             _ragdolls = null;
             _items = null;
+            _characters = null;
+            _projectiles = null;
+        }
+
+        internal static bool IsCharacter(int prefab)
+        {
+            return Build() && _characters.Contains(prefab);
+        }
+
+        internal static bool IsCharacterOrProjectile(int prefab)
+        {
+            return Build() && (_characters.Contains(prefab) || _projectiles.Contains(prefab));
         }
 
         internal static bool IsRagdoll(int prefab)
@@ -48,6 +62,8 @@ namespace ServerAuthority
 
             var ragdolls = new HashSet<int>();
             var items = new HashSet<int>();
+            var characters = new HashSet<int>();
+            var projectiles = new HashSet<int>();
             foreach (KeyValuePair<int, GameObject> entry in scene.m_namedPrefabs)
             {
                 if (entry.Value == null)
@@ -63,9 +79,19 @@ namespace ServerAuthority
                 {
                     items.Add(entry.Key);
                 }
+                else if (entry.Value.GetComponent<Character>() != null)
+                {
+                    characters.Add(entry.Key);
+                }
+                else if (entry.Value.GetComponent<Projectile>() != null)
+                {
+                    projectiles.Add(entry.Key);
+                }
             }
 
             _items = items;
+            _characters = characters;
+            _projectiles = projectiles;
             _ragdolls = ragdolls;
             return true;
         }
