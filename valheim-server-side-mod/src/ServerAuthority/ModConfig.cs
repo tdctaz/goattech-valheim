@@ -72,6 +72,8 @@ namespace ServerAuthority
         internal static ConfigEntry<float> CharacterShutdownSaveSeconds;
         internal static ConfigEntry<bool> RejectCheatedItems;
 
+        internal static ConfigEntry<bool> KeepPityCounters;
+
         internal static ConfigEntry<bool> ControlEnabled;
         internal static ConfigEntry<string> ControlDirectory;
         internal static ConfigEntry<bool> RejectCheatedProfiles;
@@ -533,6 +535,14 @@ namespace ServerAuthority
                     "check. Low levels rise quickly in vanilla, so start generous (30 or more) and " +
                     "tighten only after watching the log.",
                     new AcceptableValueRange<float>(0f, 1000f)));
+
+            KeepPityCounters = config.Bind("Loot", "KeepPityCounters", true,
+                "Keep Valheim's bad luck protection on drops across server restarts. A drop with a chance of " +
+                "30% or less, such as most trophies, counts down kills to a guaranteed drop. The game keeps " +
+                "that count in memory on whichever machine runs the creature, which here is the server, so " +
+                "it starts over at every restart. On keeps it in pity_counters.dat in this world's folder " +
+                "under the character storage path, saved with every world save. The count stays shared by " +
+                "every player, as before.");
 
             ControlEnabled = config.Bind("Control", "Enabled", true,
                 "Accept commands from the server tool through files dropped in the control directory: " +

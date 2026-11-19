@@ -441,7 +441,8 @@ What moved, and what it meant for the mods:
   owned the creature. Clients still save theirs, which count only for a creature that dies while a
   client owns it: a mount under its rider, or anything with `OwnershipMode = Vanilla`. Kept shared
   on purpose: every player's kills advance the same countdown. Vanilla's is not per player either,
-  but belongs to whichever client owns the area.
+  but belongs to whichever client owns the area. `Loot.KeepPityCounters` saves the server's counters
+  with every world save and loads them with the world, so they no longer start over at a restart.
 - The upgrade item roll in `InventoryGui.DoCrafting` comes from a per character seed,
   `Player.GetItemUpgradeChance`. Crafting stays on the client, so the mod is not involved in the
   roll. The Forge of Potential refines an item past `m_maxQuality` with no limit, which made

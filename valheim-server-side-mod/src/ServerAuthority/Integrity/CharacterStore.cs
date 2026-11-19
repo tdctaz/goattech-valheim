@@ -27,6 +27,11 @@ namespace ServerAuthority.Integrity
                 Sanitize(characterName.ToLowerInvariant()) + ".fch");
         }
 
+        internal static string WorldFilePath(string world, string fileName)
+        {
+            return Path.Combine(Root(), Sanitize(world), fileName);
+        }
+
         internal static byte[] Load(string path)
         {
             if (File.Exists(path))
@@ -108,7 +113,7 @@ namespace ServerAuthority.Integrity
             return null;
         }
 
-        private static byte[] ReadFramed(string path, bool verifyHash)
+        internal static byte[] ReadFramed(string path, bool verifyHash)
         {
             using (BinaryReader reader = new BinaryReader(File.OpenRead(path)))
             {

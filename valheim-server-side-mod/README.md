@@ -26,6 +26,8 @@ second pass finds a new owner. That pause is the hitch felt when the "area host"
 - Achievements count on a Server Authority server, which BepInEx otherwise prevents.
 - A thrown spear that misses everything lands as an item instead of vanishing in the air. See
   [Thrown spears](#thrown-spears).
+- Valheim's bad luck protection on rare drops, such as trophies, carries over server restarts. See
+  [Pity counters](#pity-counters).
 
 The client half is required. It publishes state only a player's own machine has, receives the
 credits, launches and keys the server earns on a player's behalf, and computes the same sea as the
@@ -178,6 +180,7 @@ are configured on the server only. Settings marked *debug* exist only in a
 | `Characters.RejectCheatedProfiles` | `false` | The profile's devcommands flag, which is permanent. |
 | `Characters.MaxSkillLevel` | `100` | Raise if a mod raises the skill cap. |
 | `Characters.MaxSkillGainPerHour` | `0` | Per skill. Off. |
+| `Loot.KeepPityCounters` | `true` | Server side. Save the bad luck protection on rare drops with the world, so a restart does not start it over. See [Pity counters](#pity-counters). |
 | `Control.Enabled` | `true` | Accept commands from the server tool: a message to every player, or save and quit. |
 | `Control.Directory` | empty | Default `ServerAuthority-control` next to the server executable. |
 
@@ -270,6 +273,34 @@ is touched.
   (-1874.3, 201.6, 1569.0), still moving 46 m/s, instead of being deleted.`
 - From then on it is an ordinary dropped item, which vanilla removes once it is an hour old if it is
   outside a base with nobody within 25 m.
+
+## Pity counters
+
+Valheim protects against bad luck on any drop whose chance, after the star bonus, is 30% or less,
+which covers most trophies. Each such drop keeps a count of kills until it is guaranteed. A fresh
+count puts the first drop within 2 / chance kills, 20 for a 10% trophy, and after each drop the next
+comes within one more than that. The chance is part of the count's key, so a creature at another
+star level counts on its own. With the Creatures loot curve a 10% trophy is 20% at one star and 40%
+at two, where it is rolled plainly with no protection.
+
+The game keeps the counts only in memory, on whichever machine runs the creature's death. Here that
+is the server, so every player's kills share one count, and before this it started over at every
+restart, which threw away the progress towards a trophy once a day. A client still saves its own
+counts with its character, but they only apply to a creature that dies while that client owns it,
+such as a mount under its rider.
+
+With `Loot.KeepPityCounters` on, the server writes the counts to `pity_counters.dat` in the world's
+folder under the character storage path, `characters_serverauthority/<world>/` by default, after
+every world save, and reads them back when the world loads. The server tool's backups include the
+default folder; a `Characters.StoragePath` elsewhere has to be added to its extra backup paths. A
+crash loses only the kills since the last world save. The file is hash checked and kept
+with a `.old` copy, and a damaged file is read from its `.new` or `.old` copy instead. One line is
+logged when the world loads and one per world save:
+
+```
+Pity counters: loaded 37 from .../characters_serverauthority/Dedicated/pity_counters.dat, written 2026-11-19 04:00:04 UTC.
+Pity counters: saved 38, 4 changed since the last save.
+```
 
 ## Waves and weather
 
@@ -645,6 +676,7 @@ src/ServerAuthority/
   ThrownSpears.cs         A thrown spear still flying when vanilla would delete it lands as an item
   ItemStacks.cs           Reloads a drop's count before it is merged or eaten from
   SupportGate.cs          Holds support checks until the zones around a piece have loaded
+  PityCounters.cs         Saves the server's drop pity counters with the world
   RpcTakeover.cs          Replaces a vanilla RPC handler on the server
   NearestWater.cs         Debug: nearest sailable water
   SpawnRequests.cs        Debug: the spawn request file

@@ -170,6 +170,7 @@ namespace ServerAuthority
             CreationPriority.Reset(null);
             PrefabKinds.Reset();
             AchievementGate.Reset();
+            PityCounters.Reset();
             Patches.ZDOMan_SendZDOToPeers2_Patch.Reset();
             Patches.EnvMan_UpdateEnvironment_Patch.Forget();
             Patches.ShipEffects_CustomLateUpdate_Patch.Forget();
