@@ -8,6 +8,7 @@ namespace ValheimCreatures
         internal int MaxStarsBeforeTrophy = 2;
         internal int MaxStarsWithoutBoss = 2;
         internal float LevelUpChance = 10f;
+        internal float DungeonLevelUpMultiplier = 1f;
         internal string BossFactions = "";
         internal string BossCreatures = "";
         internal string StarlessBosses = "";
@@ -65,6 +66,7 @@ namespace ValheimCreatures
                 MaxStarsBeforeTrophy = ModConfig.MaxStarsBeforeTrophy.Value,
                 MaxStarsWithoutBoss = ModConfig.MaxStarsWithoutBoss.Value,
                 LevelUpChance = ModConfig.LevelUpChance.Value,
+                DungeonLevelUpMultiplier = ModConfig.DungeonLevelUpMultiplier.Value,
                 BossFactions = ModConfig.BossFactions.Value,
                 BossCreatures = ModConfig.BossCreatures.Value,
                 StarlessBosses = ModConfig.StarlessBosses.Value,
@@ -169,6 +171,7 @@ namespace ValheimCreatures
             package.Write(RaidReturnSeconds);
             package.Write(RaidReturnTries);
             package.Write(DamagePerPlayer);
+            package.Write(DungeonLevelUpMultiplier);
         }
 
         internal static Balance Read(ZPackage package)
@@ -228,13 +231,14 @@ namespace ValheimCreatures
             balance.RaidReturnSeconds = package.ReadSingle();
             balance.RaidReturnTries = package.ReadInt();
             balance.DamagePerPlayer = package.ReadSingle();
+            balance.DungeonLevelUpMultiplier = package.ReadSingle();
             return balance;
         }
 
         public override string ToString()
         {
             return $"max stars {MaxStars}, before trophy {MaxStarsBeforeTrophy}, without boss {MaxStarsWithoutBoss}, " +
-                   $"level up chance {LevelUpChance}%, " +
+                   $"level up chance {LevelUpChance}%, dungeon multiplier {DungeonLevelUpMultiplier}, " +
                    $"damage per extra player {DamagePerPlayer}";
         }
     }

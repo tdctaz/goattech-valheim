@@ -12,8 +12,8 @@ patches an RPC method, and nothing on the server touches the local player.
 
 ## Stars
 
-A creature that can have stars in vanilla can now have up to five. One that never has stars in
-vanilla still never does.
+A creature that can have stars in vanilla can now have up to five. Outside [dungeons](#dungeons), one
+that never has stars in vanilla still never does.
 
 | Faction's boss | Most stars |
 | --- | --- |
@@ -51,13 +51,44 @@ The Frozen King has no trophy, so killing its final phase unlocks five stars on 
 | --- | --- | --- |
 | Open world | New rules | Yes |
 | Raids | New rules | Yes |
-| Fixed spawns in locations and dungeons | New rules | Yes |
-| Spawner structures: greydwarf nests, bone piles and so on | Vanilla, 0 to 2 | No |
+| Fixed spawns in outdoor locations | New rules | Yes |
+| Fixed spawns inside dungeons | [Dungeon rules](#dungeons) | Yes |
+| Spawner structures, also inside dungeons: greydwarf nests, bone piles and so on | Vanilla, 0 to 2 | No |
 | Offspring of tames | The parent's level, as in vanilla | No |
 
 Vanilla gives raiders no stars. Here a raider can have stars if its creature can have stars anywhere
 in the world. Vanilla keeps some open world spawns near the world center at zero stars; that lasts
 only until Eikthyr's trophy hangs on the stones (`Stars.CenterProtectionBoss`).
+
+### Dungeons
+
+Every creature placed inside a dungeon can have stars, whatever its spawner allows in vanilla, so
+frost cave bats and ulvs, blobs and ghosts roll too. Inside means above the height of 3000 where the
+game places interiors. Outdoor locations such as fuling villages, half buried crypts and the Sealed
+Tower do not count. Bosses never roll, and neither do the bosses of Hildir's crypt and cave, which
+the game does not flag as bosses but whose spawners set a chance of 0.
+
+| Faction's boss | Most stars in a dungeon |
+| --- | --- |
+| Alive | 3 |
+| Killed | 5, with or without its trophy on the stones |
+| Faction has no boss | 3 |
+
+These come from `Stars.MaxStarsBeforeTrophy` and `Stars.MaxStars`. Creatures with no size or tint for
+stars in vanilla show them only on the health bar.
+
+`Stars.DungeonLevelUpMultiplier` multiplies the chance of each further star. It is a decimal, so 1.5
+is 15% per star at the default chance, and it applies on top of `Stars.LevelUpChance`, world modifiers
+and world level. Hildir's crypt and cave keep their vanilla floor of one star and their own 0.2%
+chance of more, which it scales too.
+
+Spawner structures inside a dungeon, such as bone piles and draugr piles, stay exactly as in vanilla:
+0 to 2 stars at vanilla's chance, with no colors. Only new spawns are affected, and most dungeon
+spawners spawn once ever, so a dungeon someone has already been through mostly stays as it is.
+
+Vanilla's sunken crypt spawners have a maximum level of 1, so they never roll, and also store a
+minimum level of 3 that vanilla therefore never reads. A roll from such a spawner starts from zero
+stars rather than that minimum, or every crypt draugr would have two.
 
 ### Loot, health and damage
 
@@ -231,10 +262,11 @@ once. Creatures already in the world keep their stars and color.
 | Setting | Default | Notes |
 | --- | --- | --- |
 | `General.RequireClientMod` | `true` | Server only. Disconnect players without the mod or with another version. |
-| `Stars.MaxStars` | `5` | Once the faction's boss is killed and its trophy placed. |
-| `Stars.MaxStarsBeforeTrophy` | `3` | Until then. |
-| `Stars.MaxStarsWithoutBoss` | `2` | Factions with no boss. 2 is vanilla. |
+| `Stars.MaxStars` | `5` | Once the faction's boss is killed and its trophy placed; in dungeons, once it is killed. |
+| `Stars.MaxStarsBeforeTrophy` | `3` | Until then, and for factions with no boss in dungeons. |
+| `Stars.MaxStarsWithoutBoss` | `2` | Factions with no boss, outside dungeons. 2 is vanilla. |
 | `Stars.LevelUpChance` | `10` | Percent per star. 10 is vanilla. |
+| `Stars.DungeonLevelUpMultiplier` | `1` | 0 to 10, decimals allowed. Multiplies that chance inside dungeons. See [Dungeons](#dungeons). |
 | `Stars.BossFactions` | see above | `BossPrefab:Faction` pairs. |
 | `Stars.CenterProtectionBoss` | `Eikthyr` | Whose trophy lifts vanilla's zero stars near the world center. Empty keeps it. |
 | `Stars.BossCreatures` | Meadows animals to Eikthyr, stone golems to Moder | `CreaturePrefab:BossPrefab` pairs, overriding the faction. |

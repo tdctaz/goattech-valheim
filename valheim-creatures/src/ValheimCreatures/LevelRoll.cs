@@ -64,7 +64,8 @@ namespace ValheimCreatures
             {
                 Plugin.Log.LogInfo(
                     $"Roll: {source} {Utils.GetPrefabName(character.gameObject)} {stage}, min level {minLevel}, " +
-                    $"chance {spawnChance}, vanilla level {vanillaLevel} -> {level - 1} stars, {color}.");
+                    $"chance {spawnChance}, {(Character.InInterior(position) ? "in a dungeon" : "outside")}, " +
+                    $"vanilla level {vanillaLevel} -> {level - 1} stars, {color}.");
             }
 #endif
         }
@@ -84,12 +85,14 @@ namespace ValheimCreatures
         internal static int RollLevel(BossStage stage, int minLevel, float spawnChance, Vector3 position)
         {
             Balance balance = ConfigSync.Current;
+            bool inDungeon = Character.InInterior(position);
             int maxStars;
             switch (stage)
             {
                 case BossStage.NoBoss:
-                    maxStars = balance.MaxStarsWithoutBoss;
+                    maxStars = inDungeon ? balance.MaxStarsBeforeTrophy : balance.MaxStarsWithoutBoss;
                     break;
+                case BossStage.Defeated when inDungeon:
                 case BossStage.TrophyPlaced:
                     maxStars = Mathf.Max(balance.MaxStars, balance.MaxStarsBeforeTrophy);
                     break;
@@ -101,6 +104,10 @@ namespace ValheimCreatures
             float baseChance = spawnChance > 0f ? spawnChance : VanillaLevelUpChance;
             baseChance *= balance.LevelUpChance / VanillaLevelUpChance;
             float chance = baseChance > 0f ? SpawnSystem.GetLevelUpChance(position, baseChance) : 0f;
+            if (inDungeon)
+            {
+                chance *= balance.DungeonLevelUpMultiplier;
+            }
 
             int level = Mathf.Max(1, minLevel);
             int maxLevel = Mathf.Max(level, maxStars + 1);

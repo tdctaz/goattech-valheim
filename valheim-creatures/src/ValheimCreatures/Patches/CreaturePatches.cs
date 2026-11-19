@@ -97,8 +97,13 @@ namespace ValheimCreatures.Patches
 
             if (maxLevel <= 1)
             {
-                LevelRoll.Skipped(character, "location", $"spawn max level {maxLevel}");
-                return;
+                if (!character.InInterior() || chance <= 0f)
+                {
+                    LevelRoll.Skipped(character, "location", $"spawn max level {maxLevel}, chance {chance}");
+                    return;
+                }
+
+                minLevel = 1;
             }
 
             LevelRoll.Roll(character, minLevel, chance, character.transform.position, "location");

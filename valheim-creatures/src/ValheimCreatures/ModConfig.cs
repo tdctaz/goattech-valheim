@@ -23,6 +23,7 @@ namespace ValheimCreatures
         internal static ConfigEntry<int> MaxStarsBeforeTrophy;
         internal static ConfigEntry<int> MaxStarsWithoutBoss;
         internal static ConfigEntry<float> LevelUpChance;
+        internal static ConfigEntry<float> DungeonLevelUpMultiplier;
         internal static ConfigEntry<string> BossFactions;
         internal static ConfigEntry<string> BossCreatures;
         internal static ConfigEntry<string> StarlessBosses;
@@ -94,22 +95,29 @@ namespace ValheimCreatures
             MaxStars = config.Bind("Stars", "MaxStars", 5,
                 new ConfigDescription(
                     "The most stars a creature can have once the boss of its faction has been killed and its head " +
-                    "hangs on the sacrificial stones. Vanilla is 2.",
+                    "hangs on the sacrificial stones. Inside a dungeon, killing the boss is enough. Vanilla is 2.",
                     new AcceptableValueRange<int>(2, 5)));
             MaxStarsBeforeTrophy = config.Bind("Stars", "MaxStarsBeforeTrophy", 3,
                 new ConfigDescription(
-                    "The most stars a creature can have until then.",
+                    "The most stars a creature can have until then. Inside a dungeon, also the most for a faction " +
+                    "with no boss.",
                     new AcceptableValueRange<int>(2, 5)));
             MaxStarsWithoutBoss = config.Bind("Stars", "MaxStarsWithoutBoss", 2,
                 new ConfigDescription(
-                    "The most stars for a creature whose faction has no boss in BossFactions, such as serpents " +
-                    "and the dvergr. 2 is vanilla.",
+                    "The most stars outside dungeons for a creature whose faction has no boss in BossFactions, such " +
+                    "as serpents and the dvergr. 2 is vanilla.",
                     new AcceptableValueRange<int>(0, 5)));
             LevelUpChance = config.Bind("Stars", "LevelUpChance", 10f,
                 new ConfigDescription(
                     "Percent chance of each further star, rolled one star at a time. Vanilla is 10. A spawn that " +
                     "sets its own chance keeps it, and world modifiers and world level still apply.",
                     new AcceptableValueRange<float>(0f, 100f)));
+            DungeonLevelUpMultiplier = config.Bind("Stars", "DungeonLevelUpMultiplier", 1f,
+                new ConfigDescription(
+                    "Multiplies the chance of each further star for a creature placed inside a dungeon, on top of " +
+                    "LevelUpChance, world modifiers and world level, so 1.5 is 15% per star at the default chance. " +
+                    "Spawner structures such as bone piles are not affected. 0 means no stars from the roll.",
+                    new AcceptableValueRange<float>(0f, 10f)));
             BossFactions = config.Bind("Stars", "BossFactions", DefaultBossFactions,
                 "Which boss rules which faction, as BossPrefab:Faction pairs. A faction that is not listed has " +
                 "no boss. The boss's own defeat key tells whether it has been killed, and its trophy on the " +
