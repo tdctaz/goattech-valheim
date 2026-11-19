@@ -22,6 +22,7 @@ namespace ServerAuthority
         internal static ConfigEntry<int> SteamSendRateKiB;
         internal static ConfigEntry<float> NavigationLinkMaxWidth;
         internal static ConfigEntry<bool> ReuseCollisionData;
+        internal static ConfigEntry<bool> PauseServerParticles;
 
         internal static ConfigEntry<bool> KeepShipOwnedByDriver;
         internal static ConfigEntry<bool> KeepVehiclesOwnedByUser;
@@ -187,6 +188,13 @@ namespace ServerAuthority
                 "garbage per second with 300 creatures. Collecting it means marking the whole managed heap, " +
                 "over a gigabyte with a large world loaded, and that froze the server for half a second at " +
                 "a time. None of the game's collision handlers keeps the object after the call.");
+
+            PauseServerParticles = config.Bind("Performance", "PauseServerParticles", true,
+                "Pause the server's looping particle systems, such as fire, smoke, mist and glows.\nA " +
+                "dedicated server draws nothing, yet vanilla simulates every one of them: over 3000 at a " +
+                "large base, about a tenth of the server's frame time. Only looping systems that never " +
+                "remove anything when they stop are paused, so no effect object is left behind or deleted " +
+                "early; short bursts play out as usual. Players' own games are not affected.");
 
             ClearTeleportGhosts = config.Bind("Performance", "ClearTeleportGhosts", true,
                 "Tell players to drop their copy of anything that jumps out of their area, such as a " +

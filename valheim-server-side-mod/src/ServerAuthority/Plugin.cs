@@ -131,6 +131,7 @@ namespace ServerAuthority
             Plugin.EvaluateSession();
             CollisionData.Apply(Plugin.ServerActive);
             NavLinks.Reset();
+            ServerParticles.Reset();
             PrefabKinds.Reset();
             DeathTimingClient.Reset(__instance);
             CreationPriority.Reset(__instance);
