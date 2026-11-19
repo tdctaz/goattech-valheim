@@ -139,6 +139,13 @@ are configured on the server only. Settings marked *debug* exist only in a
 | `Performance.NavigationLinkMaxWidth` | `3` | Server side. Joins neighbouring navigation tiles with links up to this many metres wide instead of one per metre, which halves the links and keeps the server under Unity's 65535 link cap at large bases. Paths measured as good as vanilla's at 3; at 8, creatures detoured on building floors. `1` is vanilla. See [Server frame time](#server-frame-time). |
 | `Performance.ReuseCollisionData` | `true` | Server side. Collision callbacks and creatures' ground contact reads reuse their data instead of allocating it, about 4 MB/s less garbage with 300 creatures. |
 | `Performance.PauseServerParticles` | `true` | Server side. Pauses looping particle systems such as fire, smoke and mist, which a dedicated server never draws: about a tenth of its frame at a large base. |
+| `Experimental.ServerPhysicsRate` | `0` | Server side. Physics steps per second on the server, at least 20. `0` keeps 50. Not yet played at another rate. |
+| `Experimental.CompensatePhysicsRate` | `true` | Scales the game's per step constants, such as lunges, acceleration and ship sail force, when `ServerPhysicsRate` is not 50. No effect at 50. |
+| `Experimental.IdleCreatureStep` | `1` | Steps asleep or idle creatures only every this many physics steps. `1` is vanilla. Held back: in one test fight with it on, the fight never started. |
+| `Experimental.OwnedSyncRecheckSteps` | `0` | Sorts synced objects by owner every this many steps, skipping the server's own in between. `0` is vanilla. |
+| `Experimental.CacheGroundProbes` | `false` | Reuses a creature's ground probes while it stays within a few centimetres. |
+| `Experimental.SyncOnlyAfterPhysics` | `false` | Writes positions into network data only on frames with a physics step. |
+| `Experimental.FloatPerPhysicsStep` | `false` | Measures the water under floating objects once per physics step instead of every frame. |
 | `Vehicles.KeepShipOwnedByDriver` | `false` | Fallback only: hands a steered boat to its driver. |
 | `Vehicles.KeepVehiclesOwnedByUser` | `true` | Leases mounts and carts to their user. Leave on. |
 | `Vehicles.HoldHullsUntilWaterLoads` | `true` | Holds a server-owned hull still until the zones under it exist. Leave on. |
@@ -190,6 +197,10 @@ are configured on the server only. Settings marked *debug* exist only in a
 | `Control.Directory` | empty | Default `ServerAuthority-control` next to the server executable. |
 
 The effective configuration is logged at startup on server and client.
+
+The last four `Experimental` settings cut the server's work in fights by about a fifth in a study
+without players. In a blind test fight with a player they saved nothing measurable, and running
+wolves looked as if they skipped frames, so they stay off until each has been tried on its own.
 
 ## Mod validation
 
