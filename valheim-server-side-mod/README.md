@@ -477,6 +477,44 @@ Most sent: 43% Deer, 34% Wolf, 6% Neck, ...
 - **send work** is server CPU spent packing updates; it grows with base size and send rate.
 - **Most sent** is the share of bytes by prefab.
 
+### Server frame time
+
+Each performance report is followed by two lines that account for the server's main thread.
+
+```
+Frame time over 60s, ms per second: physics and collisions 132 (worst 6 ms, heap +0.6 MB/s),
+FixedUpdate.ZSyncTransform 102 (worst 3 ms), FixedUpdate.Character 93 (worst 12 ms, heap +0.9 MB/s),
+object creation 78 (worst 6 ms), ..., 536 of 1000 measured. Loose items: 912 instantiated, 43 with a
+rigidbody awake (14 Fish1, ...). Particle systems: 3159 on the server, 3100 paused (0 newly this
+period), 17 left playing because they end or remove themselves. Path queries: 15/s, 5% failed, 3 ms/s.
+Navigation: 303 tiles (134 Humanoid, ...), 15253 links in use of 65535, 0 queued for removal, 162 tiles
+overdue for a rebuild; 262 tile builds, 114 ms average from start to links, worst 153 ms; main thread
+1 ms/s gathering tile sources and 2 ms/s placing links; 0 link allocation failures; edges re-linked
+from 41454 edge points (5636 left out with something standing on them, 3159 kept one metre wide
+beside something) into 2566 links. Near Test Maiden at (2590, 6425): 58 tiles, 12 path queries/s, 3% failed.
+Main thread over 60s by engine step, ms per second: Update.ScriptRunBehaviourUpdate 303,
+FixedUpdate.ScriptRunBehaviourFixedUpdate 263, ...; 1000 in all. Worst frame 467 ms:
+Update.ScriptRunDelayedDynamicFrameRate 448, ... 3 garbage collection(s), managed heap 1662 MB,
+incremental with 3 ms slices. The managed heap grew by 11.2 MB/s between collections, most in ...
+```
+
+- **Frame time** is milliseconds per second of wall clock spent in each timed section, so 1000 is
+  the whole main thread. Sections inside another, such as path queries inside the AI, are left out
+  of the measured total. **heap** is how fast the managed heap grew while the section ran, a lower
+  bound on what it allocates.
+- **by engine step** covers every millisecond of the frame, split by Unity's own player loop steps.
+  `TimeUpdate.WaitForLastPresentationAndUpdateTime` is idle time while the server waits for its
+  next frame; when it disappears the server is saturated.
+- **Worst frame** names the steps that made the longest frame. A world save shows up as about half
+  a second in `ScriptRunDelayedDynamicFrameRate`, next to a `PrepareSave` line in the log. **with a
+  garbage collection in it** means the collector ran during that frame.
+- **links in use** near 65535 means creatures are about to lose their way across tile borders, and
+  every link Unity cannot make logs an error. **overdue** tiles show changes, such as a new wall,
+  that the navigation mesh has not caught up with yet.
+
+At startup the server logs the navigation settings the scene uses and how collision callbacks are
+set up, in lines starting `Navigation:` and `Physics:`.
+
 ### Reading the death timing lines
 
 A creature killed near a player is timed on both sides of the connection, so a death that shows
@@ -635,6 +673,7 @@ where `devcommands` cannot run from a client.
 | `removeships` | Destroys every instantiated ship. |
 | `split [inuse]` | Makes the server hold the nearest server-owned container as the player's, optionally in use, without telling their client: the state that locked chests. |
 | `askback` | Asks the player's client to hand back the nearest container they hold, whatever its state. If it is open there, the client must keep it. |
+| `scopes` | Logs every timed section of the current report period, not only the top ten. |
 | `navtest` | Plans paths across every navigation tile edge near the player, one every 2 m, and logs how many completed and how far they strayed. Compare runs with `NavigationLinkMaxWidth` 1 and above. |
 
 ### After a game update
@@ -737,6 +776,9 @@ src/ServerAuthority/
   NavLinks.cs             Wider links between navigation tiles, and the link cap guard
   CollisionData.cs        Reused collision and ground contact data on the server
   ServerParticles.cs      Pauses the server's looping particle systems
+  FrameBudget.cs          Frame time by section for the performance report
+  FrameLoop.cs            Frame time by engine step
+  AllocationMeter.cs      Managed heap growth while a timed section runs
   RpcTakeover.cs          Replaces a vanilla RPC handler on the server
   NearestWater.cs         Debug: nearest sailable water
   SpawnRequests.cs        Debug: the spawn request file

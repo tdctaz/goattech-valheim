@@ -91,6 +91,18 @@ namespace ServerAuthority
                     $"lowest 10s average {(_reportLowestFps == float.MaxValue ? 0f : _reportLowestFps):F1} fps, " +
                     $"worst frame {_reportWorst * 1000f:F0} ms, {_reportSlowFrames} frame(s) over " +
                     $"{SlowFrameSeconds * 1000f:F0} ms, {_reportSlowWindows} slow 10s window(s). {Snapshot(false)}");
+                string budget = FrameBudget.ClosePeriod(reportLength);
+                if (budget != null)
+                {
+                    Plugin.Log.LogInfo(budget);
+                }
+
+                string loop = FrameLoop.ClosePeriod(reportLength);
+                if (loop != null)
+                {
+                    Plugin.Log.LogInfo(loop);
+                }
+
                 string network = NetworkStats.ClosePeriod(reportLength);
                 if (network != null)
                 {
@@ -145,9 +157,12 @@ namespace ServerAuthority
                     _lastWarning = now;
                     Plugin.Log.LogWarning(
                         $"Server running slow: {fps:F1} fps over the last {windowLength:F0}s, worst frame " +
-                        $"{worst * 1000f:F0} ms. {Snapshot(true)} {NetworkStats.SendWork(windowLength)}");
+                        $"{worst * 1000f:F0} ms. {Snapshot(true)} {NetworkStats.SendWork(windowLength)} " +
+                        FrameBudget.Window(windowLength));
                 }
             }
+
+            FrameBudget.ClearWindow();
 
             NetworkStats.CloseWindow(now, windowLength);
         }
@@ -247,7 +262,7 @@ namespace ServerAuthority
             return best;
         }
 
-        private static string AnchorLabel(List<Anchor> anchors, long uid)
+        internal static string AnchorLabel(List<Anchor> anchors, long uid)
         {
             for (int i = 0; i < anchors.Count; i++)
             {

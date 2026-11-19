@@ -585,6 +585,12 @@ namespace ServerAuthority
                 return true;
             }
 
+            if (string.Equals(name, "scopes", StringComparison.OrdinalIgnoreCase))
+            {
+                Plugin.Log.LogInfo($"Timed sections so far this period: {FrameBudget.AllScopes()}.");
+                return true;
+            }
+
             if (string.Equals(name, "navtest", StringComparison.OrdinalIgnoreCase))
             {
                 NavTest.Run(anchor.Position, parts.Length > 1 ? parts[1] : null);

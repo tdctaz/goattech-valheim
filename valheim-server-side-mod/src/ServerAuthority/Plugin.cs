@@ -43,6 +43,7 @@ namespace ServerAuthority
             }
 
             Harmony = Harmony.CreateAndPatchAll(typeof(Plugin).Assembly, Guid);
+            StartCoroutine(FrameBudget.PhysicsProbe());
             Log.LogInfo("Server Authority patches installed, waiting for a server to start.");
         }
 
@@ -130,6 +131,7 @@ namespace ServerAuthority
             AchievementGate.Reset();
             Plugin.EvaluateSession();
             CollisionData.Apply(Plugin.ServerActive);
+            FrameBudget.Reset(Plugin.ServerActive);
             NavLinks.Reset();
             ServerParticles.Reset();
             PrefabKinds.Reset();
@@ -171,6 +173,7 @@ namespace ServerAuthority
             CreaturesRaids.Reset();
             ServerControl.Reset();
             ServerPerformance.Reset();
+            FrameBudget.Reset(false);
             CollisionData.Apply(false);
             DeathTimingClient.Reset(null);
             CreationPriority.Reset(null);
