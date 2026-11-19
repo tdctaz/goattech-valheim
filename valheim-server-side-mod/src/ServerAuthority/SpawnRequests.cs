@@ -585,6 +585,12 @@ namespace ServerAuthority
                 return true;
             }
 
+            if (string.Equals(name, "navtest", StringComparison.OrdinalIgnoreCase))
+            {
+                NavTest.Run(anchor.Position, parts.Length > 1 ? parts[1] : null);
+                return true;
+            }
+
             if (string.Equals(name, "diag", StringComparison.OrdinalIgnoreCase))
             {
                 Diagnose(anchor);

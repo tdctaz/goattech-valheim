@@ -20,6 +20,7 @@ namespace ServerAuthority
         internal static ConfigEntry<bool> CreateCreaturesFirst;
         internal static ConfigEntry<int> ZdoSendWindowMaxKiB;
         internal static ConfigEntry<int> SteamSendRateKiB;
+        internal static ConfigEntry<float> NavigationLinkMaxWidth;
 
         internal static ConfigEntry<bool> KeepShipOwnedByDriver;
         internal static ConfigEntry<bool> KeepVehiclesOwnedByUser;
@@ -161,6 +162,22 @@ namespace ServerAuthority
                     "player at once. It only matters together with ZdoSendWindowMaxKiB, since vanilla's " +
                     "window caps a player below 150 anyway. 0 leaves Valheim's 150.",
                     new AcceptableValueRange<int>(0, 4096)));
+
+            NavigationLinkMaxWidth = config.Bind("Performance", "NavigationLinkMaxWidth", 3f,
+                new ConfigDescription(
+                    "Widest link, in metres, the server's pathfinding may use to join two neighbouring " +
+                    "navigation tiles.\nVanilla places one link per metre of tile edge and per floor it finds " +
+                    "there, about 150 for each 32m tile at a large base, and Unity allows 65535 in all. With " +
+                    "several players at busy bases the server ran out, logged an error for every link it could " +
+                    "not make, and creatures lost their way across tile borders. A stretch of edge at one " +
+                    "height with nothing standing on it becomes a single wider link instead, and the server " +
+                    "frees links already waiting for removal before it would run out. A point with a wall, tree " +
+                    "or anything else standing right on it gets no link, since the navigation mesh stops short " +
+                    "of it and the link could not connect, and one with something close beside it keeps a " +
+                    "one metre link as in vanilla. 3 halves the links with paths as good as vanilla's; wider " +
+                    "links made creatures detour on building floors, where the mesh is cut into small pieces. " +
+                    "1 restores vanilla.",
+                    new AcceptableValueRange<float>(1f, 32f)));
 
             ClearTeleportGhosts = config.Bind("Performance", "ClearTeleportGhosts", true,
                 "Tell players to drop their copy of anything that jumps out of their area, such as a " +

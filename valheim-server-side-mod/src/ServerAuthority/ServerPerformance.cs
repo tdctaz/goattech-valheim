@@ -51,6 +51,7 @@ namespace ServerAuthority
 
         internal static void Tick()
         {
+            NavLinks.DescribeOnce();
             float now = Time.realtimeSinceStartup;
             NetworkStats.Tick(now);
             DeathTiming.Tick();

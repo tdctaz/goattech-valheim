@@ -136,6 +136,7 @@ are configured on the server only. Settings marked *debug* exist only in a
 | `Performance.ClearTeleportGhosts` | `true` | Fixes players seeing a frozen copy of someone at a portal they used. |
 | `Performance.CreateFreshDropsFirst` | `true` | Client side. Ragdolls and fresh loot near the player are created ahead of the queue of objects waiting to load. |
 | `Performance.CreateCreaturesFirst` | `true` | Client side. Creatures, other players and projectiles within 64 m are created ahead of waiting buildings, so nothing the server is already running stays invisible. |
+| `Performance.NavigationLinkMaxWidth` | `3` | Server side. Joins neighbouring navigation tiles with links up to this many metres wide instead of one per metre, which halves the links and keeps the server under Unity's 65535 link cap at large bases. Paths measured as good as vanilla's at 3; at 8, creatures detoured on building floors. `1` is vanilla. See [Server frame time](#server-frame-time). |
 | `Vehicles.KeepShipOwnedByDriver` | `false` | Fallback only: hands a steered boat to its driver. |
 | `Vehicles.KeepVehiclesOwnedByUser` | `true` | Leases mounts and carts to their user. Leave on. |
 | `Vehicles.HoldHullsUntilWaterLoads` | `true` | Holds a server-owned hull still until the zones under it exist. Leave on. |
@@ -632,6 +633,7 @@ where `devcommands` cannot run from a client.
 | `removeships` | Destroys every instantiated ship. |
 | `split [inuse]` | Makes the server hold the nearest server-owned container as the player's, optionally in use, without telling their client: the state that locked chests. |
 | `askback` | Asks the player's client to hand back the nearest container they hold, whatever its state. If it is open there, the client must keep it. |
+| `navtest` | Plans paths across every navigation tile edge near the player, one every 2 m, and logs how many completed and how far they strayed. Compare runs with `NavigationLinkMaxWidth` 1 and above. |
 
 ### After a game update
 
@@ -730,9 +732,11 @@ src/ServerAuthority/
   PityCounters.cs         Saves the server's drop pity counters with the world
   CreaturePriority.cs     Clients create nearby creatures and projectiles before waiting buildings
   HitsOnYou.cs            The hits on the player in the ten seconds before each death
+  NavLinks.cs             Wider links between navigation tiles, and the link cap guard
   RpcTakeover.cs          Replaces a vanilla RPC handler on the server
   NearestWater.cs         Debug: nearest sailable water
   SpawnRequests.cs        Debug: the spawn request file
+  NavTest.cs              Debug: paths across every tile edge near a player
   Integrity/              Mod manifest, validation, character storage and both ends of the protocol
   Patches/                Harmony patches, one file per subsystem
 tools/PatchCheck/         Resolves every patch target against the game assembly

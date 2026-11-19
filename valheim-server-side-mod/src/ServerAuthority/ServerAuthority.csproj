@@ -45,6 +45,9 @@
     <Reference Include="UnityEngine.ParticleSystemModule" Private="false">
       <HintPath>$(ValheimManaged)/UnityEngine.ParticleSystemModule.dll</HintPath>
     </Reference>
+    <Reference Include="UnityEngine.AIModule" Private="false">
+      <HintPath>$(ValheimManaged)/UnityEngine.AIModule.dll</HintPath>
+    </Reference>
     <Reference Include="Splatform" Private="false">
       <HintPath>$(ValheimManaged)/Splatform.dll</HintPath>
     </Reference>

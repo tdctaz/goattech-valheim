@@ -129,6 +129,7 @@ namespace ServerAuthority
             SummonSkill.Reset();
             AchievementGate.Reset();
             Plugin.EvaluateSession();
+            NavLinks.Reset();
             PrefabKinds.Reset();
             DeathTimingClient.Reset(__instance);
             CreationPriority.Reset(__instance);
