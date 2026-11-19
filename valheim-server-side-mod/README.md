@@ -522,6 +522,33 @@ before it vanished, and the ragdoll showed 10 ms after that. Loot shown 2010 ms 
 
 Both sides add a summary to each performance report, with the median and worst of each delay.
 
+Each death of the player is logged on their own client with the hits of the ten seconds before it:
+
+```
+You died at 23:19:45.112 at (2637, 33, 6428), with 3533 object(s) waiting to be created. Hits in
+the last 10 s, newest first: 0.3 s before, Goblin 1:2452001, melee, 52 raw and 31 taken, from 1.8 m,
+attacker created here 0.6 s before and drawn 0.4 m from its last server position, 3533 waiting;
+2.1 s before, GoblinArcher 1:2452010, ranged, 40 raw and 0 taken, from 31.0 m, attacker not created
+here so vanilla ignored the hit, 3610 waiting.
+```
+
+- **Raw** is the damage the attacker sent, **taken** the health the player lost to it, which is
+  zero when it was blocked, dodged or ignored.
+- A hit whose attacker this client does not have says why: not created here yet, already gone (an
+  arrow from a creature that has since died), or absent while the player could not be hit anyway,
+  such as when dodging or loading. Only the first counts as ignored in the report.
+- **Created here ... before** is how long the attacker had existed on this client, so a short time
+  means it was invisible until just before it hit. A creature created before the session's first
+  record shows as such.
+- **Drawn ... from its last server position** is how far the client drew the attacker from where its
+  owner last placed it, which is the visible lag of its movement.
+- **Waiting** is the client's queue of objects not yet created at that moment.
+
+Every performance report adds how many hits hurt, how many came from an attacker created less than
+a second earlier, how many vanilla ignored because the attacker was not created here, the median and
+worst drawn offset, and how many creatures, players and projectiles `CreateCreaturesFirst` created
+ahead of waiting buildings.
+
 ## Vanilla code that assumes a client owner
 
 A server that owns everything lacks local state vanilla assumes an owner has: a local player, its
@@ -702,6 +729,7 @@ src/ServerAuthority/
   SupportGate.cs          Holds support checks until the zones around a piece have loaded
   PityCounters.cs         Saves the server's drop pity counters with the world
   CreaturePriority.cs     Clients create nearby creatures and projectiles before waiting buildings
+  HitsOnYou.cs            The hits on the player in the ten seconds before each death
   RpcTakeover.cs          Replaces a vanilla RPC handler on the server
   NearestWater.cs         Debug: nearest sailable water
   SpawnRequests.cs        Debug: the spawn request file

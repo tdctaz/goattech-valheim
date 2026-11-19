@@ -605,7 +605,7 @@ namespace ServerAuthority
             return leaves;
         }
 
-        private static int CountWaiting()
+        internal static int CountWaiting()
         {
             ZNetScene scene = ZNetScene.instance;
             if (scene == null)

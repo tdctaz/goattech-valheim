@@ -74,7 +74,7 @@ namespace ServerAuthority
                 _values.Clear();
             }
 
-            internal string Describe(string unit = "ms")
+            internal string Describe(string unit = "ms", string format = "F0")
             {
                 if (_values.Count == 0)
                 {
@@ -84,7 +84,7 @@ namespace ServerAuthority
                 _values.Sort();
                 double median = _values[_values.Count / 2];
                 double worst = _values[_values.Count - 1];
-                return $"median {median:F0} {unit}, worst {worst:F0} {unit}";
+                return $"median {median.ToString(format)} {unit}, worst {worst.ToString(format)} {unit}";
             }
         }
 
