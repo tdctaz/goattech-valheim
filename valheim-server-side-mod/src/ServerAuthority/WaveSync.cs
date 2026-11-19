@@ -116,6 +116,7 @@ namespace ServerAuthority
                 Plugin.Log.LogInfo(
                     $"WaveSync constants: DeterministicWind={ModConfig.DeterministicWind.Value} " +
                     $"BlendedWeatherWind={ModConfig.BlendedWeatherWind.Value} " +
+                    $"MatchDeepNorthWaves={ModConfig.MatchDeepNorthWaves.Value} " +
                     $"environmentDuration={env.m_environmentDuration}s transitionDuration={env.m_transitionDuration}s " +
                     $"windTransitionDuration={env.m_windTransitionDuration}s windPeriodDuration={env.m_windPeriodDuration}s " +
                     $"blendCell={WindBlend.CellSize}m. These must match between machines for their seas to match.");
@@ -314,6 +315,7 @@ namespace ServerAuthority
                 $"WaveSync hull {zdo.m_uid}: owner={who} isOwner={zdo.IsOwner()} " +
                 $"pos=({com.x:0.0},{com.y:0.00},{com.z:0.0}) water={average:0.00} " +
                 $"spread={highest - lowest:0.00} depth={depth:0.00} " +
+                $"deepNorthFade={WorldGenerator.DeepNorthWaveFade(com.x, com.z):0.00} " +
                 $"disableLevel={ship.m_disableLevel:0.00} " +
                 $"floating={(depth > ship.m_disableLevel ? "NO" : "yes")} " +
                 $"crew={ship.m_players.Count} vel={ship.m_body.linearVelocity.y:0.00} {sea}");

@@ -43,6 +43,7 @@ namespace ServerAuthority
 
         internal static ConfigEntry<bool> DeterministicWind;
         internal static ConfigEntry<bool> AlignRenderedWaterWithPhysics;
+        internal static ConfigEntry<bool> MatchDeepNorthWaves;
         internal static ConfigEntry<bool> ServerWeatherFollowsPlayers;
         internal static ConfigEntry<bool> ServerWeatherPerPosition;
         internal static ConfigEntry<bool> BlendedWeatherWind;
@@ -247,6 +248,16 @@ namespace ServerAuthority
                 "second early at 144fps and half a second early at 30, and boats sit visibly wrong " +
                 "in it by an amount that depends on the player's frame rate. The smoothing that " +
                 "hides a clock correction is kept; only the drift is removed.");
+
+            MatchDeepNorthWaves = config.Bind("Waves", "MatchDeepNorthWaves", true,
+                "Float everything in the Deep North on the sea as it is drawn.\nThe water shader " +
+                "fades every wave across the Deep North border and keeps the small ones at a tenth " +
+                "of their height, but buoyancy fades only the large swells and keeps the four " +
+                "smallest waves at full height. Ice, boats, fish and swimmers there therefore bob " +
+                "on ripples up to a metre and a half times the wind strength that nobody can see, " +
+                "on a sea that is drawn almost flat. This gives buoyancy the shader's fade. " +
+                "Vanilla has the same mismatch.\nThis must be set the same on the server and on " +
+                "every client.");
 
             ServerWeatherFollowsPlayers = config.Bind("Waves", "ServerWeatherFollowsPlayers", true,
                 "Resolve the server's weather at a connected player rather than at the world " +

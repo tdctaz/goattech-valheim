@@ -58,6 +58,19 @@ namespace ServerAuthority.Patches
         }
     }
 
+    [HarmonyPatch(typeof(WaterVolume), nameof(WaterVolume.CalcWave),
+        new[] { typeof(Vector3), typeof(float), typeof(Vector4), typeof(float), typeof(float), typeof(float) })]
+    internal static class WaterVolume_CalcWave_Patch
+    {
+        private static void Prefix(ref float waveFactor, float waveFactorBig)
+        {
+            if (ModConfig.MatchDeepNorthWaves.Value)
+            {
+                waveFactor *= Mathf.Max(waveFactorBig, 0.1f);
+            }
+        }
+    }
+
     /// <summary>
     /// Gives a headless server the viewpoint it structurally lacks.
     ///

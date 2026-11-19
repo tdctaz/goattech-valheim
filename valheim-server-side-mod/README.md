@@ -141,6 +141,7 @@ are configured on the server only. Settings marked *debug* exist only in a
 | `Vehicles.RequireLoadedAreaForWaterborneOwner` | `true` | Only matters with `ServerOwnsWaterborne` off. Leave on. |
 | `Waves.DeterministicWind` | `true` | Wind as a function of world time. Must match on server and clients. |
 | `Waves.AlignRenderedWaterWithPhysics` | `true` | Draw the sea at the moment boats float on it. |
+| `Waves.MatchDeepNorthWaves` | `true` | Float things in the Deep North on the sea as it is drawn. Must match on server and clients. |
 | `Waves.ServerWeatherFollowsPlayers` | `true` | Resolve the server's global weather at a player, not the world origin. |
 | `Waves.ServerWeatherPerPosition` | `true` | Everything the server simulates gets the weather at its own position. |
 | `Waves.BlendedWeatherWind` | `true` | Wave strength from weather blended over position and world time. Must match on server and clients. |
@@ -318,6 +319,15 @@ everyone but the hull's owner.
   times real time and snapping gaps over ten seconds.
 - **The server picked its weather at the world origin**, where its unused camera sits.
   `ServerWeatherFollowsPlayers` resolves it at the lowest-id player.
+
+One more disagreement is vanilla's own and is the same on every machine: in the Deep North the drawn
+sea and the physical one are different functions. Across the 200 m border band the water shader fades
+all ten waves and keeps the five smallest at no less than a tenth of their height. `CalcWave` fades
+only the six largest, to nothing, and keeps the four smallest at full height. Deep in the Deep North
+the sea is drawn almost flat while ice, boats, fish and swimmers bob on ripples up to 1.5 m times the
+wind strength, two to three seconds apart. `MatchDeepNorthWaves` scales those four waves by the
+shader's fade. The fifth smallest still fades to nothing where the shader keeps a tenth, a difference
+of under 0.1 m times the wind strength. The WaveSync hull line gives `deepNorthFade` under the hull.
 
 `ServerWeatherPerPosition` goes further: anything the server simulates gets the weather a player
 standing at its position would have (`LocalWeather.cs`), loaded around each call by a `WeatherScope`.
