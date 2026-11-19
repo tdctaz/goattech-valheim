@@ -70,6 +70,23 @@ dedicated server and on every client, all at the same version. Valheim Server To
 - Fixed: dropped items could vanish, or be duplicated, after a player stood among drops they could
   not carry, as when clearing a demolished build while overweight. The server merged nearby stacks
   from out of date counts; in one test 124 of 200 black marble were lost
+- Fixed: the bad luck protection on rare drops such as trophies started over at every server
+  restart, so the daily restart threw away the progress towards a trophy. The server now saves it
+  with the world
+- Fixed: building pieces attached across a zone border could fall when a player crossed into the
+  next zone, taking everything they held with them. The server now checks a piece's support only
+  once the zones around it have loaded
+- Fixed: with several players at large bases the server ran out of navigation links, so creatures
+  lost their way across tile borders. Tiles are now joined by wider links, about half as many, with
+  paths as good as before, and a vanilla leak that kept some links in use for good is fixed
+- The server no longer simulates fire, smoke and mist that nobody sees on it, and makes far less
+  garbage in physics, which gives it more room for creatures at a large base
+- Creatures, other players and projectiles near you are created before the buildings still loading
+  around you, so after a respawn at a large base a monster is no longer invisible while it closes in
+- Ice, boats, fish and swimmers in the Deep North float on the sea as it is drawn, rather than
+  bobbing on ripples the game does not show. Vanilla has the same mismatch
+- Each death logs the hits of the last ten seconds in the player's own log, and the server's
+  performance report shows where its frame time goes
 
 ### Rebalanced
 
@@ -89,6 +106,9 @@ dedicated server and on every client, all at the same version. Valheim Server To
 
 - Up to 5 stars, unlocked by killing the faction's boss and hanging its trophy on the sacrificial
   stones; that unlocks the higher stars without making any star more likely
+- Every creature placed inside a dungeon can have stars: up to 3, or up to 5 once its faction's boss
+  is killed. Spawner structures such as bone piles stay as in vanilla. A setting raises the chance
+  of each star in dungeons on its own
 - Loot scales 1x, 2x, 4x, 6x, 8x, 10x; health and damage follow vanilla's per level rules
 - Colored stars each give a trait:
   - Fast: +40% movement speed, +50% turning speed
