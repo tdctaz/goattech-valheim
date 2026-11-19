@@ -58,6 +58,9 @@ namespace ServerAuthority
             Characters.Clear();
             Peers.Clear();
             _builtOnFrame = -1;
+#if DEBUG_TOOLS
+            StandIns.Reset();
+#endif
         }
 
         private static void Refresh()
@@ -107,6 +110,19 @@ namespace ServerAuthority
                     Zone = ZoneSystem.GetZone(pos),
                 });
             }
+
+#if DEBUG_TOOLS
+            List<StandIns.StandIn> standIns = StandIns.Current;
+            for (int i = 0; i < standIns.Count; i++)
+            {
+                Anchors.Add(new Anchor
+                {
+                    Uid = StandIns.Uid(i),
+                    Position = standIns[i].Position,
+                    Zone = ZoneSystem.GetZone(standIns[i].Position),
+                });
+            }
+#endif
         }
 
         internal static Vector3 LivePosition(ZNetPeer peer)

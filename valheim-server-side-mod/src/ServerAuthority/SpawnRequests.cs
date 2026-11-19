@@ -597,6 +597,19 @@ namespace ServerAuthority
                 return true;
             }
 
+            if (string.Equals(name, "gc", StringComparison.OrdinalIgnoreCase))
+            {
+                GcSwitch.Handle(parts);
+                return true;
+            }
+
+            if (string.Equals(name, "profile", StringComparison.OrdinalIgnoreCase))
+            {
+                float seconds = parts.Length > 1 && float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float s) ? s : 30f;
+                UpdateProfiler.Start(seconds);
+                return true;
+            }
+
             if (string.Equals(name, "diag", StringComparison.OrdinalIgnoreCase))
             {
                 Diagnose(anchor);

@@ -673,8 +673,14 @@ where `devcommands` cannot run from a client.
 | `removeships` | Destroys every instantiated ship. |
 | `split [inuse]` | Makes the server hold the nearest server-owned container as the player's, optionally in use, without telling their client: the state that locked chests. |
 | `askback` | Asks the player's client to hand back the nearest container they hold, whatever its state. If it is open there, the client must keep it. |
+| `profile [seconds]` | Times every `Update`, `LateUpdate` and `FixedUpdate` in the game and its coroutines for that long, then logs the slowest, how fast each grew the heap, and a census of particle systems, lights, animators and audio sources. |
 | `scopes` | Logs every timed section of the current report period, not only the top ten. |
 | `navtest` | Plans paths across every navigation tile edge near the player, one every 2 m, and logs how many completed and how far they strayed. Compare runs with `NavigationLinkMaxWidth` 1 and above. |
+| `gc [slice <ms>\|collect\|pause [seconds]\|resume]` | Sets the incremental collector's time slice, forces a collection, or pauses collection for up to ten minutes. |
+
+`BepInEx/config/serverauthority_standins.txt` lists points the server simulates as if a player stood
+there, one `x z [name]` per line, so a busy base can be loaded and measured with nobody online.
+Monsters near a stand-in stay awake as they would near a player.
 
 ### After a game update
 
@@ -783,6 +789,9 @@ src/ServerAuthority/
   NearestWater.cs         Debug: nearest sailable water
   SpawnRequests.cs        Debug: the spawn request file
   NavTest.cs              Debug: paths across every tile edge near a player
+  StandIns.cs             Debug: points simulated as if a player stood there
+  UpdateProfiler.cs       Debug: times every update method in the game
+  GcSwitch.cs             Debug: garbage collector controls
   Integrity/              Mod manifest, validation, character storage and both ends of the protocol
   Patches/                Harmony patches, one file per subsystem
 tools/PatchCheck/         Resolves every patch target against the game assembly

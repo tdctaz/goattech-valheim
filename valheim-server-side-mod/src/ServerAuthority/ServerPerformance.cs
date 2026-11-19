@@ -51,6 +51,10 @@ namespace ServerAuthority
 
         internal static void Tick()
         {
+#if DEBUG_TOOLS
+            UpdateProfiler.Tick();
+            GcSwitch.Tick();
+#endif
             NavLinks.DescribeOnce();
             ServerParticles.Tick();
             float now = Time.realtimeSinceStartup;
@@ -264,6 +268,19 @@ namespace ServerAuthority
 
         internal static string AnchorLabel(List<Anchor> anchors, long uid)
         {
+#if DEBUG_TOOLS
+            string standIn = StandIns.Label(uid);
+            if (standIn != null)
+            {
+                for (int i = 0; i < anchors.Count; i++)
+                {
+                    if (anchors[i].Uid == uid)
+                    {
+                        return $"{standIn} at ({anchors[i].Position.x:F0}, {anchors[i].Position.z:F0})";
+                    }
+                }
+            }
+#endif
             for (int i = 0; i < anchors.Count; i++)
             {
                 if (anchors[i].Uid != uid)

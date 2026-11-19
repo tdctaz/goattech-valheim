@@ -48,6 +48,12 @@
     <Reference Include="UnityEngine.AIModule" Private="false">
       <HintPath>$(ValheimManaged)/UnityEngine.AIModule.dll</HintPath>
     </Reference>
+    <Reference Include="UnityEngine.AnimationModule" Private="false">
+      <HintPath>$(ValheimManaged)/UnityEngine.AnimationModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.AudioModule" Private="false">
+      <HintPath>$(ValheimManaged)/UnityEngine.AudioModule.dll</HintPath>
+    </Reference>
     <Reference Include="Splatform" Private="false">
       <HintPath>$(ValheimManaged)/Splatform.dll</HintPath>
     </Reference>
