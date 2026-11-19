@@ -137,6 +137,7 @@ are configured on the server only. Settings marked *debug* exist only in a
 | `Performance.CreateFreshDropsFirst` | `true` | Client side. Ragdolls and fresh loot near the player are created ahead of the queue of objects waiting to load. |
 | `Performance.CreateCreaturesFirst` | `true` | Client side. Creatures, other players and projectiles within 64 m are created ahead of waiting buildings, so nothing the server is already running stays invisible. |
 | `Performance.NavigationLinkMaxWidth` | `3` | Server side. Joins neighbouring navigation tiles with links up to this many metres wide instead of one per metre, which halves the links and keeps the server under Unity's 65535 link cap at large bases. Paths measured as good as vanilla's at 3; at 8, creatures detoured on building floors. `1` is vanilla. See [Server frame time](#server-frame-time). |
+| `Performance.ReuseCollisionData` | `true` | Server side. Collision callbacks and creatures' ground contact reads reuse their data instead of allocating it, about 4 MB/s less garbage with 300 creatures. |
 | `Vehicles.KeepShipOwnedByDriver` | `false` | Fallback only: hands a steered boat to its driver. |
 | `Vehicles.KeepVehiclesOwnedByUser` | `true` | Leases mounts and carts to their user. Leave on. |
 | `Vehicles.HoldHullsUntilWaterLoads` | `true` | Holds a server-owned hull still until the zones under it exist. Leave on. |
@@ -733,6 +734,7 @@ src/ServerAuthority/
   CreaturePriority.cs     Clients create nearby creatures and projectiles before waiting buildings
   HitsOnYou.cs            The hits on the player in the ten seconds before each death
   NavLinks.cs             Wider links between navigation tiles, and the link cap guard
+  CollisionData.cs        Reused collision and ground contact data on the server
   RpcTakeover.cs          Replaces a vanilla RPC handler on the server
   NearestWater.cs         Debug: nearest sailable water
   SpawnRequests.cs        Debug: the spawn request file

@@ -21,6 +21,7 @@ namespace ServerAuthority
         internal static ConfigEntry<int> ZdoSendWindowMaxKiB;
         internal static ConfigEntry<int> SteamSendRateKiB;
         internal static ConfigEntry<float> NavigationLinkMaxWidth;
+        internal static ConfigEntry<bool> ReuseCollisionData;
 
         internal static ConfigEntry<bool> KeepShipOwnedByDriver;
         internal static ConfigEntry<bool> KeepVehiclesOwnedByUser;
@@ -178,6 +179,14 @@ namespace ServerAuthority
                     "links made creatures detour on building floors, where the mesh is cut into small pieces. " +
                     "1 restores vanilla.",
                     new AcceptableValueRange<float>(1f, 32f)));
+
+            ReuseCollisionData = config.Bind("Performance", "ReuseCollisionData", true,
+                "On the server, hand every physics collision callback the same data object, and read the " +
+                "ground contacts creatures check every physics step into a reused array.\nVanilla allocates " +
+                "a new object for every callback and a new array for every contact read: about 4 MB of " +
+                "garbage per second with 300 creatures. Collecting it means marking the whole managed heap, " +
+                "over a gigabyte with a large world loaded, and that froze the server for half a second at " +
+                "a time. None of the game's collision handlers keeps the object after the call.");
 
             ClearTeleportGhosts = config.Bind("Performance", "ClearTeleportGhosts", true,
                 "Tell players to drop their copy of anything that jumps out of their area, such as a " +

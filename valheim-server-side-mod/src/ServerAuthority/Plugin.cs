@@ -129,6 +129,7 @@ namespace ServerAuthority
             SummonSkill.Reset();
             AchievementGate.Reset();
             Plugin.EvaluateSession();
+            CollisionData.Apply(Plugin.ServerActive);
             NavLinks.Reset();
             PrefabKinds.Reset();
             DeathTimingClient.Reset(__instance);
@@ -169,6 +170,7 @@ namespace ServerAuthority
             CreaturesRaids.Reset();
             ServerControl.Reset();
             ServerPerformance.Reset();
+            CollisionData.Apply(false);
             DeathTimingClient.Reset(null);
             CreationPriority.Reset(null);
             CreaturePriority.Reset(null);
