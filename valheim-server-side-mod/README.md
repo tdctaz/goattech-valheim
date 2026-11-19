@@ -785,6 +785,12 @@ src/ServerAuthority/
   FrameBudget.cs          Frame time by section for the performance report
   FrameLoop.cs            Frame time by engine step
   AllocationMeter.cs      Managed heap growth while a timed section runs
+  PhysicsTuning.cs        Experimental physics settings
+  CreatureStep.cs         Experimental: idle creatures stepped less often
+  SyncStep.cs             Experimental: synced objects sorted by owner every few steps
+  GroundProbes.cs         Experimental: ground probes reused while a creature stays put
+  FrameSkips.cs           Experimental: sync and water work only on frames with a physics step
+  StepCompensation.cs     Experimental: per step constants scaled to the physics rate
   RpcTakeover.cs          Replaces a vanilla RPC handler on the server
   NearestWater.cs         Debug: nearest sailable water
   SpawnRequests.cs        Debug: the spawn request file
@@ -792,6 +798,7 @@ src/ServerAuthority/
   StandIns.cs             Debug: points simulated as if a player stood there
   UpdateProfiler.cs       Debug: times every update method in the game
   GcSwitch.cs             Debug: garbage collector controls
+  PhysicsLab.cs           Debug: physics experiments at runtime
   Integrity/              Mod manifest, validation, character storage and both ends of the protocol
   Patches/                Harmony patches, one file per subsystem
 tools/PatchCheck/         Resolves every patch target against the game assembly

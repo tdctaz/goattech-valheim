@@ -54,6 +54,7 @@ namespace ServerAuthority
 #if DEBUG_TOOLS
             UpdateProfiler.Tick();
             GcSwitch.Tick();
+            PhysicsLab.Tick();
 #endif
             NavLinks.DescribeOnce();
             ServerParticles.Tick();

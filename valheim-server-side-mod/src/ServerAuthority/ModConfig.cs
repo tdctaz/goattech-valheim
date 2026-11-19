@@ -651,6 +651,8 @@ namespace ServerAuthority
                     "every death, 0 turns the lines off. The performance report summarises all deaths either " +
                     "way, on the server and on each client.",
                     new AcceptableValueRange<int>(0, 60000)));
+
+            PhysicsTuning.Bind(config);
         }
     }
 }

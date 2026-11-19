@@ -597,6 +597,12 @@ namespace ServerAuthority
                 return true;
             }
 
+            if (string.Equals(name, "physics", StringComparison.OrdinalIgnoreCase))
+            {
+                PhysicsLab.Handle(parts);
+                return true;
+            }
+
             if (string.Equals(name, "gc", StringComparison.OrdinalIgnoreCase))
             {
                 GcSwitch.Handle(parts);

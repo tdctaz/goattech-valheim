@@ -131,6 +131,7 @@ namespace ServerAuthority
             AchievementGate.Reset();
             Plugin.EvaluateSession();
             CollisionData.Apply(Plugin.ServerActive);
+            PhysicsTuning.Apply(Plugin.ServerActive);
             FrameBudget.Reset(Plugin.ServerActive);
             NavLinks.Reset();
             ServerParticles.Reset();
@@ -175,6 +176,7 @@ namespace ServerAuthority
             ServerPerformance.Reset();
             FrameBudget.Reset(false);
             CollisionData.Apply(false);
+            PhysicsTuning.Apply(false);
             DeathTimingClient.Reset(null);
             CreationPriority.Reset(null);
             CreaturePriority.Reset(null);
