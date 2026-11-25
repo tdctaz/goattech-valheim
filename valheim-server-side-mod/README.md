@@ -109,7 +109,7 @@ in `BepInEx/plugins/` on both. Older packs shipped a `start_server_bepinex.sh` t
 variables for a Doorstop 4 library, and the server starts with no BepInEx at all.
 
 The server log should say `Server Authority active. Ownership mode: Always.` The mod warns at startup
-when the game version differs from the one it was verified against (1.0.21).
+when the game version differs from the one it was verified against (1.0.30).
 
 ## Configuration
 
@@ -708,10 +708,10 @@ or replaces against a fresh decompilation: the merge in `ZDOMan.RPC_ZDOData` and
 `SpawnSystem.UpdateSpawning`, `RandEventSystem.FixedUpdate`, `Player.Save` (the player data layout
 `ProfileCodec` reads and `FreshCharacter` writes), the cheat flag `Character.OnDeath` reads for `KillCredit`,
 `EnvMan.UpdateEnvironment` and `GetBiome`,
-`CookingStation.RPC_RemoveDoneItem` and `SpawnItem`, the per-slot record of who put the item in (`RPC_AddItem`, `SetSlot`), the stat counting in `TreeBase`, `TreeLog`,
+`CookingStation.RPC_RemoveDoneItem` and `SpawnItem`, the per-slot record of who put the item in (`RPC_AddItem`, `SetSlot`) and whom `SpawnItem` credits with the craft stat (`RPC_SetCrafterStat`), the stat counting in `TreeBase`, `TreeLog`,
 `MineRock`, `MineRock5`, `Character.RPC_Damage` and `Tameable.Tame`, `BaseAI.FindEnemy`,
 `ArcheryTarget.OnProjectileHit`, the flight time in `Projectile.FixedUpdate` and `SpawnOnHit` that
-`ThrownSpears` mirrors, the counts `ItemDrop.AutoStackItems` and `RemoveOne` read for `ItemStacks`, the removal in `ZNetScene.RemoveObjects`, the active area test in `ZNetScene.PointInsideActiveArea` and `WearNTear.UpdateWear` and `UpdateSupport`, which `SupportGate` relies on, `Tameable.UnsummonMaxInstances`, `Pet`, and the RPC replacements
+`ThrownSpears` mirrors, the counts `ItemDrop.AutoStackItems` and `RemoveOne` read for `ItemStacks`, the removal in `ZNetScene.RemoveObjects`, the active area test in `ZNetScene.PointInsideActiveArea` and `WearNTear.UpdateWear` and `UpdateSupport`, which `SupportGate` relies on, `Tameable.UnsummonMaxInstances` and the names it counts (`m_summonNameBlockers`), `Pet`, the owner-run work in the components `StaticObjects` treats as passive (`TerrainComp.CheckSnow` since 1.0.30), the constants and enum values the mods compile in (`GlobalKeys` shifted in 1.0.30), and the RPC replacements
 `Pickable.RPC_Pick` and `Trap.RPC_OnStateChanged`. `RESEARCH.md` records
 how Valheim distributes authority and what earlier game versions changed.
 

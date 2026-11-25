@@ -517,3 +517,94 @@ hold: the Queen's raid, `army_seekers`, has its `SeekerBrute` entry disabled, so
 seeker and a brood. The startup raid summary lists disabled entries too, so earlier logs cannot show
 whether 1.0.20 had it enabled. The Danish mod's 13 localization tables hold the same 6050 strings,
 and none of the 1459 rows it fills changed its English or gained a vanilla translation.
+
+
+## 12. Re-verification against Valheim 1.0.30
+
+Diffing the publicized 1.0.21 and 1.0.30 client assemblies changes 55 files in `assembly_valheim` and
+5 in `assembly_utils`, about 2100 lines once the decompiler's IL offset comments are dropped, and adds
+`ZDODebugNetworkDataCollecter`, `ColorUtils` and `FastIterableKeyValues`. The dedicated server's
+assembly carries the same changes and the same constants, and its 30 FPS target in
+`RequestTargetFrameRateFromPreset` and the reference position pinned in `Game` are unchanged. Unity
+moved from 6000.0.75f1 to 6000.0.85f2. Network version 42, so 1.0.21 clients cannot join a 1.0.30
+server. Every save format version is unchanged, so nothing `ProfileCodec` reads or `FreshCharacter`
+writes moved; terrain data alone gained a version. `PatchCheck` resolves every target for all four
+mods against both assemblies, and every game and Unity type and member the released 0.9.13 DLLs
+reference still resolves. Most of the update is gamepad, menu and accessibility work, a rounding fix
+for saved rotations, a leaner ZDO serializer, and snow that settles back on cleared ground in the Deep
+North.
+
+What moved, and what it meant for the mods:
+
+- `GlobalKeys` gained `defeated_queen`, `defeated_fader` and `defeated_frozenking` after
+  `defeated_bonemass`, which renumbered the seven keys after them. C# compiles an enum member in as
+  its number, so the 0.9.13 build of `AshlandsHintPatches` tests and sets 52, which in 1.0.30 is
+  `KilledTroll` rather than `AshlandsOcean`. In a world where a troll has died it returns at the test
+  and never sets the key for Hugin's hint; in one where none has, it would set `KilledTroll`. A
+  rebuild compiles in 55. `NoBuildingFall`, which `SupportGate` reads, and `PlayerEvents`, which
+  Creatures reads, come before the inserted keys and kept their numbers. No other enum changed, and
+  the only other changed constants are the network version, `TerrainComp.terrainCompVersion` and two
+  that `SmokeRenderer` and `ZInput` dropped, none of which a mod uses.
+- `CookingStation.SpawnItem` no longer counts the craft stat on the machine that runs it. On a
+  station with `m_recordCrafter`, which in the 1.0.30 bundles is only the Frost Foundry, it sends the
+  new `RPC_SetCrafterStat` to the peer recorded putting the item in, if that peer is still connected,
+  and that client counts it; otherwise nobody counts it. The cooking station, the iron cooking station
+  and the oven credit nobody, so in vanilla 1.0.30 their food no longer counts toward the
+  `AllFoodCooked` achievement, whose triggers include every cooked meat and the oven's breads and
+  pies. Vanilla's crafter id is now the peer's uid in both branches. `CookingCollect` replaces
+  `RPC_RemoveDoneItem` and never calls `SpawnItem`, so it was unaffected, and it now gives the craft
+  stat to whoever it names as crafter: on the Foundry the player who put the item in, as vanilla does,
+  or nobody if they have left, and the collector for an item queued before 1.0.21; on every other
+  station the collector, as before, so cooking still counts toward the achievement.
+- `Tameable.UnsummonMaxInstances` also counts followers whose name is in the summon's new
+  `Character.m_summonNameBlockers`. In the 1.0.30 bundles only the Spirit Caller's four spirits have
+  one, each naming all four, so the wolf, boar, bjorn and moose spirits now share one limit set by the
+  staff's quality. `SummonCapPatches` counted only the summon's own name, so it missed the limit
+  message whenever another kind of spirit took the count over. It now counts the same way.
+- `SpawnSystem.UpdateSpawnList` counted every creature spawned earlier in the same pass, by any entry,
+  against each entry's `m_maxSpawned`; it now counts only the entry's own. The key of each entry's
+  spawn timer still uses its position in the list, so saved timers carry over. The mod replaces
+  `UpdateSpawning` and calls vanilla's `UpdateSpawnList`, so it gets the fix: one pass can now fill
+  several entries, and a zone can hold somewhat more creatures than before.
+- `WearNTear.UpdateSupport` again needs a strictly better support to replace its cached value,
+  undoing 1.0.21's change, so the server recalculates support as often as before 1.0.21. `SupportGate`
+  and `HeadlessPatches` only wrap it.
+- `TerrainComp` lets snow settle back. Its owner, every 60 seconds and once every object in the three
+  by three zones around it has been created, raises the snow channel of each painted vertex in the
+  Deep North toward the world's own value, over about two hours, skips vertices under a building piece
+  by a raycast against the `piece` layer, and saves. Data version 2 appends the time of the last step,
+  so an unloaded terrain edit catches up when it loads again. `StaticObjects` treats `TerrainComp` as
+  passive and `KeepStaticObjectsOwned` keeps terrain edits with the server, so the server does this.
+  It creates every object in a player's active area as the owning client would, so the check passes in
+  the same places. Not yet seen on a live server.
+- `ZPackage.WriteSmallRotation`, which a world save uses for every rotation other than zero, at half
+  degree steps, rounds where it truncated, so an angle a float error left just under a step, such as
+  89.9999 for 90, was saved half a degree short, and pieces saved since 1.0.0 can be up to half a
+  degree off. The new `fixHalfDegRotPieces`
+  command straightens pieces around the local player that it owns, so it does nothing on a dedicated
+  server and, with the server owning every piece, nothing from a client either. Serialization writes
+  the same bytes through cached delegates and `FastIterableKeyValues`. `ZDOExtraData.Update`,
+  `ZDOHelper.Update` and `BinarySearchDictionary.SetValue` are gone and `ZDO.SetSector` takes the old
+  sector; no mod uses them, and `InternalSetPosition`, which `TeleportGhostPatches` wraps, behaves as
+  before.
+- `SlowUpdater` runs every frame, at least 10 instances and otherwise up to 100 a frame within 0.25 ms,
+  with no 0.1 second pause between passes. It still hands each `SUpdate` the reference position's zone,
+  so `StaticPhysics_SUpdate_Patch` still applies.
+- `Smoke` draws each puff with its own renderer again instead of through `SmokeRenderer`. A sandboxed
+  1.0.30 server running the new builds on the test world, with stand-ins at its five bases, logged the
+  same three warnings about missing scripts and an audio clip as 1.0.21 and no exceptions.
+- `ZNet.SaveWorldThread` takes the automatic backup after the save rather than before.
+  `ZoneSystem.m_globalKeysValues` ignores case. `Player.GetItemUpgradeChance` seeds the first try from
+  the profile's creation date instead of the player's name, and `PlayerProfile` loads that date as
+  local time instead of a date; `ResetToFresh` copies it and the server stores uploads untouched.
+  `Cover` casts its rays as one batch. `Character.UpdateAshlandsWater` cools the heat level outside
+  hot water. None of these needs a change.
+
+The data the mods depend on still matches in the 1.0.30 server bundles: the staffs, root armor, tower
+shields and burnt wood conversion Rebalanced changes carry the vanilla values its README quotes, and
+every boss, faction, raid and raid spawn Creatures names exists and is enabled. The Queen's raid,
+`army_seekers`, still has its `SeekerBrute` entry disabled. The Danish translation grew: the 13
+localization tables hold 6058 strings, and vanilla now has Danish for 1100 of the 1459 rows the
+Danish mod lists as missing. One of those rows changed its English (`piece_scale_walls_description`),
+and four new strings have no Danish (`settings_accessibilitybrightness`, `buildui_search`,
+`buildui_focustags`, `buildui_focuspieces`).
