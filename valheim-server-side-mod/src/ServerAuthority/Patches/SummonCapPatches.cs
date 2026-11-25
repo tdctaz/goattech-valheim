@@ -31,7 +31,8 @@ namespace ServerAuthority.Patches
             int count = 0;
             foreach (Character item in Character.GetAllCharacters())
             {
-                if (item.m_name != character.m_name || item.GetComponent<MonsterAI>() == null)
+                if ((item.m_name != character.m_name && !character.m_summonNameBlockers.Contains(item.m_name)) ||
+                    item.GetComponent<MonsterAI>() == null)
                 {
                     continue;
                 }
