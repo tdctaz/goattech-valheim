@@ -113,9 +113,9 @@ namespace ServerAuthority
 
             spawned.GetComponent<Rigidbody>().linearVelocity = direction * station.m_spawnForce;
             station.m_pickEffector.Create(position, Quaternion.identity);
-            if (collector != null)
+            if (crafter != null)
             {
-                StatCredit.ItemCraft(collector.Peer, item.m_itemData.m_shared.m_name);
+                StatCredit.ItemCraft(crafter.Peer, item.m_itemData.m_shared.m_name);
             }
         }
 
@@ -125,30 +125,33 @@ namespace ServerAuthority
             string stationName = Utils.GetPrefabName(station.gameObject);
             string gave = collector != null
                 ? $"{stationName} gave {amount} x {itemName} to {collector.Name}"
-                : $"{stationName} gave {amount} x {itemName} to a sender with no connected peer, so no craft stat was recorded";
+                : $"{stationName} gave {amount} x {itemName} to a sender with no connected peer";
             if (!station.m_recordCrafter)
             {
                 if (collector == null)
                 {
-                    Plugin.Log.LogWarning($"{gave}.");
+                    Plugin.Log.LogWarning($"{gave}, so no craft stat was recorded.");
                 }
 
                 return;
             }
 
             string who = adder != 0L ? "who put it in" : "who collected it, as nobody was recorded putting it in";
-            if (crafter == null && adder != 0L && collector != null)
-            {
-                Plugin.Log.LogInfo($"{gave}. Peer {adder}, who put it in, is no longer connected, so no crafter was recorded.");
-                return;
-            }
-
             if (crafter == null)
             {
                 string missing = adder != 0L
                     ? $"Peer {adder}, who put it in, is no longer connected"
                     : "Nobody was recorded putting it in";
-                Plugin.Log.LogWarning($"{gave}. {missing}, so no crafter was recorded.");
+                string text = $"{gave}. {missing}, so no crafter or craft stat was recorded.";
+                if (adder != 0L && collector != null)
+                {
+                    Plugin.Log.LogInfo(text);
+                }
+                else
+                {
+                    Plugin.Log.LogWarning(text);
+                }
+
                 return;
             }
 
@@ -156,7 +159,7 @@ namespace ServerAuthority
             {
                 Plugin.Log.LogWarning(
                     $"{gave}. The character ZDO {crafter.CharacterId} of {crafter.Name}, {who}, was not found, " +
-                    "so no crafter was recorded.");
+                    "so no crafter was recorded. The craft stat went to them.");
                 return;
             }
 
@@ -164,17 +167,17 @@ namespace ServerAuthority
             {
                 Plugin.Log.LogWarning(
                     $"{gave}. The character ZDO {crafter.CharacterId} of {crafter.Name}, {who}, has no player id, " +
-                    "so no crafter was recorded.");
+                    "so no crafter was recorded. The craft stat went to them.");
                 return;
             }
 
             if (collector == null)
             {
-                Plugin.Log.LogWarning($"{gave}. Crafted by {crafter.Name}, {who}.");
+                Plugin.Log.LogWarning($"{gave}. Crafted by {crafter.Name}, {who}, who got the craft stat.");
                 return;
             }
 
-            Plugin.Log.LogInfo($"{gave}, crafted by {crafter.Name}, {who}.");
+            Plugin.Log.LogInfo($"{gave}, crafted by {crafter.Name}, {who}, who got the craft stat.");
         }
     }
 }
