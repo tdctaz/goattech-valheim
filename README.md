@@ -64,9 +64,10 @@ dedicated server and on every client, all at the same version. Valheim Server To
 - Fixed: a thrown spear that hit nothing was deleted after 10 seconds in the air, or as soon as it
   flew out of the area loaded around its thrower. It now drops as an item where it was, so it can
   be found
-- Built for Valheim 1.0.21. With 0.9.10 on 1.0.21, nothing could be taken out of a cooking station
-- Items from the Frost Foundry name the player who put the materials in as their crafter, as
-  Valheim 1.0.21 does, rather than the player who took them out
+- Built for Valheim 1.0.30. With 0.9.13 on 1.0.30, the server read the wrong world key, so Hugin's
+  warning about the Ashlands ocean would not come
+- Items from the Frost Foundry name the player who put the materials in as their crafter, and count
+  as their craft, as Valheim 1.0.30 does, rather than the player who took them out
 - Fixed: dropped items could vanish, or be duplicated, after a player stood among drops they could
   not carry, as when clearing a demolished build while overweight. The server merged nearby stacks
   from out of date counts; in one test 124 of 200 black marble were lost
@@ -87,6 +88,11 @@ dedicated server and on every client, all at the same version. Valheim Server To
   bobbing on ripples the game does not show. Vanilla has the same mismatch
 - Each death logs the hits of the last ten seconds in the player's own log, and the server's
   performance report shows where its frame time goes
+- Food taken from a cooking station or an oven still counts as cooked by the player who takes it,
+  towards the achievement for cooking every food. Valheim 1.0.30 no longer counts it for anyone
+- Fixed: the message that the summon limit was reached did not show when the Spirit Caller sent
+  back a spirit of another kind. Since Valheim 1.0.30 its wolf, boar, bjorn and moose spirits share
+  one limit
 
 ### Rebalanced
 
